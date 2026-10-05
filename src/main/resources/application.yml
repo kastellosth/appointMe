@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: appointMe
+  datasource:
+    url: jdbc:postgresql://localhost:5432/appointMe
+    username: appointMe
+    password: appointMe
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
