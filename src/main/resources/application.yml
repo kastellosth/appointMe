@@ -1,10 +1,10 @@
 spring:
   application:
-    name: appointMe
+    name: appointme
   datasource:
-    url: jdbc:postgresql://localhost:5432/appointMe
-    username: appointMe
-    password: appointMe
+    url: jdbc:postgresql://localhost:5432/appointme
+    username: appointme
+    password: appointme
   jpa:
     hibernate:
       ddl-auto: validate
