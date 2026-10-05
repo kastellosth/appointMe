@@ -1,11 +1,11 @@
 services:
   db:
     image: postgres:16
-    container_name: appointMe-db
+    container_name: appointme-db
     environment:
-      POSTGRES_DB: appointMe
-      POSTGRES_USER: appointMe
-      POSTGRES_PASSWORD: appointMe
+      POSTGRES_DB: appointme
+      POSTGRES_USER: appointme
+      POSTGRES_PASSWORD: appointme
     ports:
       - "5432:5432"
     volumes:

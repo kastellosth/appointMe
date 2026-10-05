@@ -1,4 +1,4 @@
-package com.kastellosth.appointMe;
+package com.kastellosth.appointme;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
