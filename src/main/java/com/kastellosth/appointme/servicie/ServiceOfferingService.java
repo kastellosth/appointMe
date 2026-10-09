@@ -4,6 +4,7 @@ import com.kastellosth.appointme.dto.ServiceOfferingRequest;
 import com.kastellosth.appointme.dto.ServiceOfferingResponse;
 import com.kastellosth.appointme.entity.ServiceOffering;
 import com.kastellosth.appointme.entity.Tenant;
+import com.kastellosth.appointme.exception.NotFoundException;
 import com.kastellosth.appointme.repository.ServiceOfferingRepository;
 import com.kastellosth.appointme.repository.TenantRepository;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +23,7 @@ public class ServiceOfferingService {
     @Transactional
     public ServiceOfferingResponse create(Long tenantId, ServiceOfferingRequest req) {
         Tenant tenant = tenantRepository.findById(tenantId)
-                .orElseThrow(() -> new RuntimeException("Tenant not found"));
+                .orElseThrow(() -> new NotFoundException("Tenant " + tenantId + " not found"));
         ServiceOffering s = new ServiceOffering();
         s.setTenant(tenant);
         apply(s, req);
@@ -54,7 +55,7 @@ public class ServiceOfferingService {
 
     private ServiceOffering find(Long tenantId, Long id) {
         return repository.findByIdAndTenantId(id, tenantId)
-                .orElseThrow(() -> new RuntimeException("Service not found"));
+                .orElseThrow(() -> new NotFoundException("Service " + id + " not found"));
     }
 
     private void apply(ServiceOffering s, ServiceOfferingRequest req) {

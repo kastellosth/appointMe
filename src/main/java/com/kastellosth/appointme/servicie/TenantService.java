@@ -3,6 +3,9 @@ package com.kastellosth.appointme.service;
 import com.kastellosth.appointme.dto.TenantRequest;
 import com.kastellosth.appointme.dto.TenantResponse;
 import com.kastellosth.appointme.entity.Tenant;
+import com.kastellosth.appointme.exception.BadRequestException;
+import com.kastellosth.appointme.exception.ConflictException;
+import com.kastellosth.appointme.exception.NotFoundException;
 import com.kastellosth.appointme.repository.TenantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,8 +20,13 @@ public class TenantService {
 
     private final TenantRepository tenantRepository;
 
+
     @Transactional
     public TenantResponse create(TenantRequest request) {
+        if (tenantRepository.existsBySlug(request.slug())) {
+            throw new ConflictException("Slug '" + request.slug() + "' is already in use");
+        }
+
         Tenant tenant = new Tenant();
         tenant.setName(request.name());
         tenant.setSlug(request.slug());
@@ -27,7 +35,7 @@ public class TenantService {
             try {
                 ZoneId.of(request.timezone());
             } catch (DateTimeException e) {
-                throw new IllegalArgumentException("Unknown time zone: " + request.timezone());
+                throw new BadRequestException("Unknown time zone: " + request.timezone());
             }
             tenant.setTimezone(request.timezone());
         }
@@ -38,9 +46,10 @@ public class TenantService {
     @Transactional(readOnly = true)
     public TenantResponse getById(Long id) {
         Tenant tenant = tenantRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tenant " + id + " not found"));
+                .orElseThrow(() -> new NotFoundException("Tenant " + id + " not found"));
         return toResponse(tenant);
     }
+
 
     private TenantResponse toResponse(Tenant tenant) {
         return new TenantResponse(

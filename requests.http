@@ -182,11 +182,11 @@ GET {{baseUrl}}/tenants/{{tenantId}}/services
 
 ### I1. Read tenant A's service through tenant B's URL
 ###     EXPECTED: NOT the data (500 now, 404 after Day 7)
-GET {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+GET {{baseUrl}}/tenants/{{otherTenantId}}/services/{{serviceId}}
 
 ### I2. Update tenant A's service through tenant B's URL
 ###     EXPECTED: NOT found, and the service stays unchanged
-PUT {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+PUT {{baseUrl}}/tenants/{{otherTenantId}}/services/{{serviceId}}
 Content-Type: application/json
 
 {
@@ -198,7 +198,7 @@ Content-Type: application/json
 
 ### I3. Delete tenant A's service through tenant B's URL
 ###     EXPECTED: NOT found, and active stays true
-DELETE {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+DELETE {{baseUrl}}/tenants/{{otherTenantId}}/services/{{serviceId}}
 
 
 ### ---------------------------------------------------------------------
