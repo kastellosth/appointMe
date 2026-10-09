@@ -1,0 +1,12 @@
+### Create a tenant
+POST http://localhost:8080/tenants
+Content-Type: application/json
+
+{
+  "name": "Test Barber",
+  "slug": "test-barber",
+  "timezone": "Europe/Athens"
+}
+
+### Get tenant 1
+GET http://localhost:8080/tenants/2
