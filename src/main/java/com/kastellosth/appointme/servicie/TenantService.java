@@ -8,6 +8,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.DateTimeException;
+import java.time.ZoneId;
+
 @Service
 @RequiredArgsConstructor
 public class TenantService {
@@ -19,12 +22,17 @@ public class TenantService {
         Tenant tenant = new Tenant();
         tenant.setName(request.name());
         tenant.setSlug(request.slug());
+
         if (request.timezone() != null) {
+            try {
+                ZoneId.of(request.timezone());
+            } catch (DateTimeException e) {
+                throw new IllegalArgumentException("Unknown time zone: " + request.timezone());
+            }
             tenant.setTimezone(request.timezone());
         }
 
-        Tenant saved = tenantRepository.save(tenant);
-        return toResponse(saved);
+        return toResponse(tenantRepository.save(tenant));
     }
 
     @Transactional(readOnly = true)

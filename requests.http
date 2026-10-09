@@ -1,5 +1,22 @@
-### Create a tenant
-POST http://localhost:8080/tenants
+### =====================================================================
+### appointMe - requests.http  (Days 5-6)
+### Run each request with the green arrow next to it, top to bottom.
+### Write down the status code you get and compare with "EXPECTED".
+### =====================================================================
+
+### Variables - edit if your ids differ (check: SELECT id, name FROM tenants;)
+@baseUrl = http://localhost:8080
+@tenantId = 1
+@otherTenantId = 2
+@serviceId = 1
+
+
+### ---------------------------------------------------------------------
+### TENANTS
+### ---------------------------------------------------------------------
+
+### T1. Create tenant            EXPECTED: 201 (note the id in the response)
+POST {{baseUrl}}/tenants
 Content-Type: application/json
 
 {
@@ -8,5 +25,204 @@ Content-Type: application/json
   "timezone": "Europe/Athens"
 }
 
-### Get tenant 1
-GET http://localhost:8080/tenants/2
+> {% client.global.set("newTenantId", response.body.id); %}
+
+### T2. Get tenant               EXPECTED: 200
+GET {{baseUrl}}/tenants/{{tenantId}}
+
+### T3. Get missing tenant       EXPECTED: 500 now, 404 after Day 7
+GET {{baseUrl}}/tenants/9999
+
+### T4. Duplicate slug           EXPECTED: 500 now, 409 after Day 7
+POST {{baseUrl}}/tenants
+Content-Type: application/json
+
+{
+  "name": "Another Barber",
+  "slug": "test-barber",
+  "timezone": "Europe/Athens"
+}
+
+### T5. Slug with capitals/space EXPECTED: 400 (pattern check)
+POST {{baseUrl}}/tenants
+Content-Type: application/json
+
+{
+  "name": "Bad Slug",
+  "slug": "Test Barber",
+  "timezone": "UTC"
+}
+
+### T6. Blank name               EXPECTED: 400
+POST {{baseUrl}}/tenants
+Content-Type: application/json
+
+{
+  "name": "",
+  "slug": "no-name",
+  "timezone": "UTC"
+}
+
+### T7. Invalid time zone        EXPECTED: error (400 after Day 7)
+###     Works only if you did the ZoneId.of() exercise.
+POST {{baseUrl}}/tenants
+Content-Type: application/json
+
+{
+  "name": "Mars Barber",
+  "slug": "mars-barber",
+  "timezone": "Mars/Base"
+}
+
+### T8. Second tenant (for the isolation test)   EXPECTED: 201
+POST {{baseUrl}}/tenants
+Content-Type: application/json
+
+{
+  "name": "Second Gym",
+  "slug": "second-gym",
+  "timezone": "Europe/London"
+}
+
+
+### ---------------------------------------------------------------------
+### SERVICES (Day 6)
+### ---------------------------------------------------------------------
+
+### S1. Valid create             EXPECTED: 201 (note the service id)
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{
+  "name": "Haircut",
+  "durationMinutes": 30,
+  "price": 25.00
+}
+
+> {% client.global.set("newServiceId", response.body.id); %}
+
+### S2. Blank name              EXPECTED: 400
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{
+  "name": "",
+  "durationMinutes": 30,
+  "price": 25.00
+}
+
+### S3. Negative duration       EXPECTED: 400
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{
+  "name": "Haircut",
+  "durationMinutes": -5,
+  "price": 25.00
+}
+
+### S4. Missing price          EXPECTED: 400
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{
+  "name": "Haircut",
+  "durationMinutes": 30
+}
+
+### S5. Negative price         EXPECTED: 400
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{
+  "name": "Haircut",
+  "durationMinutes": 30,
+  "price": -1
+}
+
+### S6. Missing duration       EXPECTED: 400 (this is why the field is Integer, not int)
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{
+  "name": "Haircut",
+  "price": 25.00
+}
+
+### S7. List services          EXPECTED: 200, array
+GET {{baseUrl}}/tenants/{{tenantId}}/services
+
+### S8. Get one service       EXPECTED: 200
+GET {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+
+### S9. Get missing service    EXPECTED: 500 now, 404 after Day 7
+GET {{baseUrl}}/tenants/{{tenantId}}/services/9999
+
+### S10. Update (change price) EXPECTED: 200, new price in the body
+PUT {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+Content-Type: application/json
+
+{
+  "name": "Haircut",
+  "durationMinutes": 45,
+  "price": 30.00,
+  "active": true
+}
+
+### S11. Delete (soft)        EXPECTED: 204, row stays with active = false
+DELETE {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+
+### S12. List after delete    EXPECTED: 200 (inactive one still shown unless you did the active-filter exercise)
+GET {{baseUrl}}/tenants/{{tenantId}}/services
+
+
+### ---------------------------------------------------------------------
+### ISOLATION CHECK
+### ---------------------------------------------------------------------
+
+### I1. Read tenant A's service through tenant B's URL
+###     EXPECTED: NOT the data (500 now, 404 after Day 7)
+GET {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+
+### I2. Update tenant A's service through tenant B's URL
+###     EXPECTED: NOT found, and the service stays unchanged
+PUT {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+Content-Type: application/json
+
+{
+  "name": "Hacked",
+  "durationMinutes": 1,
+  "price": 0.00,
+  "active": true
+}
+
+### I3. Delete tenant A's service through tenant B's URL
+###     EXPECTED: NOT found, and active stays true
+DELETE {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+
+
+### ---------------------------------------------------------------------
+### EXTRA EXPERIMENTS
+### ---------------------------------------------------------------------
+
+### X1. Try to sneak in an id   EXPECTED: 201, but the id in the body is ignored
+POST {{baseUrl}}/tenants
+Content-Type: application/json
+
+{
+  "id": 99,
+  "name": "Sneaky",
+  "slug": "sneaky",
+  "timezone": "UTC"
+}
+
+### X2. Empty body             EXPECTED: 400
+POST {{baseUrl}}/tenants
+Content-Type: application/json
+
+{}
+
+### X3. Missing Content-Type   EXPECTED: 415
+POST {{baseUrl}}/tenants
+
+{"name":"x","slug":"x"}
