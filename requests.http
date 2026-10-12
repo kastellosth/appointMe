@@ -226,3 +226,112 @@ Content-Type: application/json
 POST {{baseUrl}}/tenants
 
 {"name":"x","slug":"x"}
+
+
+### C1. Create customer. EXPECT 201, email saved lowercase: "ann@example.com"
+POST {{baseUrl}}/tenants/{{tenantId}}/customers
+Content-Type: application/json
+
+{ "fullName": "Ann Smith", "email": "Ann@Example.com", "phone": "6900000001" }
+
+> {% client.global.set("customerId", response.body.id); %}
+
+### C2. Duplicate email, different capitals. EXPECT 409
+POST {{baseUrl}}/tenants/{{tenantId}}/customers
+Content-Type: application/json
+
+{ "fullName": "Another Ann", "email": "ANN@example.com" }
+
+### C3. Blank name + bad email. EXPECT 400, errors for fullName and email
+POST {{baseUrl}}/tenants/{{tenantId}}/customers
+Content-Type: application/json
+
+{ "fullName": "", "email": "not-an-email" }
+
+### C4a. No email. EXPECT 201 (email is null in the response)
+POST {{baseUrl}}/tenants/{{tenantId}}/customers
+Content-Type: application/json
+
+{ "fullName": "Walk-in Customer" }
+
+### C4b. Run C4a again. EXPECT 201 again (many customers may have no email)
+POST {{baseUrl}}/tenants/{{tenantId}}/customers
+Content-Type: application/json
+
+{ "fullName": "Walk-in Customer" }
+
+### C4c. Blank email string. EXPECT 201, saved as null (not "")
+POST {{baseUrl}}/tenants/{{tenantId}}/customers
+Content-Type: application/json
+
+{ "fullName": "Blank Email Person", "email": "   " }
+
+### C5. Search + page + sort. EXPECT 200, content has only names containing "ann"
+GET {{baseUrl}}/tenants/{{tenantId}}/customers?name=ann&page=0&size=10&sort=fullName,asc
+
+### C5b. Search is case-insensitive. EXPECT same result as C5
+GET {{baseUrl}}/tenants/{{tenantId}}/customers?name=ANN
+
+### C5c. Empty name = no filter. EXPECT every customer, paged
+GET {{baseUrl}}/tenants/{{tenantId}}/customers?name=
+
+### C6. Page 0, size 10. EXPECT 10 items, page 0, totalElements 28+, totalPages 3+
+GET {{baseUrl}}/tenants/{{tenantId}}/customers?page=0&size=10
+
+### C6b. Page 1. EXPECT 10 DIFFERENT items than C6
+GET {{baseUrl}}/tenants/{{tenantId}}/customers?page=1&size=10
+
+### C6c. Page far past the end. EXPECT 200 with "content": []
+GET {{baseUrl}}/tenants/{{tenantId}}/customers?page=999&size=10
+
+### C6d. Descending sort. EXPECT 'Walk-in Customer' / names later in the alphabet first
+GET {{baseUrl}}/tenants/{{tenantId}}/customers?sort=fullName,desc&size=5
+
+### C6e. Size cap. EXPECT "size": 100 in the response, not 100000
+GET {{baseUrl}}/tenants/{{tenantId}}/customers?size=100000
+
+### C7. Bad sort field. EXPECT 400 "Cannot sort by 'nonsense'" (not 500)
+GET {{baseUrl}}/tenants/{{tenantId}}/customers?sort=nonsense
+
+### C8. Get one. EXPECT 200
+GET {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+
+### C8b. Missing id. EXPECT 404
+GET {{baseUrl}}/tenants/{{tenantId}}/customers/999999
+
+### C9. ISOLATION: read tenant 1's customer through tenant 2's URL. EXPECT 404
+GET {{baseUrl}}/tenants/{{otherTenantId}}/customers/{{customerId}}
+
+### C9b. ISOLATION: tenant 2 list must not contain tenant 1's customers. EXPECT empty content
+GET {{baseUrl}}/tenants/{{otherTenantId}}/customers
+
+### C10. Update, keeping the SAME email. EXPECT 200 (must not conflict with itself)
+PUT {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+Content-Type: application/json
+
+{ "fullName": "Ann Smith-Jones", "email": "ann@example.com", "phone": "6900000099" }
+
+### C10b. Update to an email another customer owns. EXPECT 409
+PUT {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+Content-Type: application/json
+
+{ "fullName": "Ann Smith-Jones", "email": "c1@test.com" }
+
+### C10c. Update with invalid body. EXPECT 400
+PUT {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+Content-Type: application/json
+
+{ "fullName": "" }
+
+### C11. Delete. EXPECT 204
+DELETE {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+
+### C11b. Delete again. EXPECT 404
+DELETE {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+
+### C11c. ISOLATION: delete another tenant's customer through your URL. EXPECT 404
+DELETE {{baseUrl}}/tenants/{{otherTenantId}}/customers/1
+
+### N1. EXPECT 200 and a long console log: one "select ... from customers",
+###     then one "select ... from tenants where id=?" per distinct tenant
+GET {{baseUrl}}/debug/n-plus-one

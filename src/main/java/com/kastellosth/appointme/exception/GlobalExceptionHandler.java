@@ -2,6 +2,7 @@ package com.kastellosth.appointme.exception;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -68,6 +69,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "One or more fields are invalid");
         pd.setProperty("errors", errors);
         return ResponseEntity.badRequest().body(pd);
+    }
+
+    @ExceptionHandler(PropertyReferenceException.class)
+    public ProblemDetail handleBadSort(PropertyReferenceException ex) {
+        return problem(HttpStatus.BAD_REQUEST, "Bad request",
+                "Cannot sort by '" + ex.getPropertyName() + "'");
     }
 
     private ProblemDetail problem(HttpStatus status, String title, String detail) {
