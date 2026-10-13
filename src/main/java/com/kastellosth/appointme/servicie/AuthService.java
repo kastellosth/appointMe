@@ -1,6 +1,7 @@
 package com.kastellosth.appointme.servicie;
 
 import com.kastellosth.appointme.dto.LoginRequest;
+import com.kastellosth.appointme.dto.LoginResponse;
 import com.kastellosth.appointme.dto.RegisterRequest;
 import com.kastellosth.appointme.dto.UserResponse;
 import com.kastellosth.appointme.entity.User;
@@ -22,6 +23,7 @@ public class AuthService {
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
+    private final JwtService jwtService;
 
     @Transactional
     public UserResponse register(RegisterRequest req) {
@@ -40,7 +42,7 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public UserResponse login(LoginRequest req) {
+    public LoginResponse login(LoginRequest req) {
         String email = normalize(req.email());
 
         try {
@@ -53,7 +55,16 @@ public class AuthService {
 
         User user = users.findByEmail(email)
                 .orElseThrow(() -> new UnauthorizedException("Invalid email or password"));
-        return toResponse(user);
+
+        return new LoginResponse(jwtService.issue(user), "Bearer",
+                jwtService.ttlSeconds(), toResponse(user));
+    }
+
+    @Transactional(readOnly = true)
+    public UserResponse currentUser(Long userId) {
+        return users.findById(userId)
+                .map(this::toResponse)
+                .orElseThrow(() -> new UnauthorizedException("User no longer exists"));
     }
 
     private String normalize(String email) {
