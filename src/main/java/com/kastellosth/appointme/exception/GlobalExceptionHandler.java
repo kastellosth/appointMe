@@ -77,6 +77,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "Cannot sort by '" + ex.getPropertyName() + "'");
     }
 
+    @ExceptionHandler(UnauthorizedException.class)
+    public ProblemDetail handleUnauthorized(UnauthorizedException ex) {
+        return problem(HttpStatus.UNAUTHORIZED, "Unauthorized", ex.getMessage());
+    }
+
     private ProblemDetail problem(HttpStatus status, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
         pd.setTitle(title);

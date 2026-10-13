@@ -295,3 +295,67 @@ Content-Type: application/json
 
 ### A13. ISOLATION: tenant 2's URL, tenant 1's appointment. EXPECT 404
 GET {{baseUrl}}/tenants/{{otherTenantId}}/appointments/1
+
+
+### R1. Register. EXPECT 201, response has NO password or hash; email lowercased
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "email": "Test1@Example.com", "password": "correct-horse-1", "fullName": "Test One" }
+
+### R2. Same email, different capitals. EXPECT 409
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "email": "TEST1@example.com", "password": "correct-horse-1", "fullName": "Clone" }
+
+### R3. Password too short. EXPECT 400, errors.password
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "email": "short@example.com", "password": "abc", "fullName": "Shorty" }
+
+### R4. Bad email + blank name. EXPECT 400, errors for email and fullName
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "email": "nope", "password": "correct-horse-1", "fullName": "" }
+
+### R5. Second user, SAME password. EXPECT 201 (compare the two hashes in the DB afterwards)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "email": "test2@example.com", "password": "correct-horse-1", "fullName": "Test Two" }
+
+### R6. Login OK. EXPECT 200 with the user, no hash
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "test1@example.com", "password": "correct-horse-1" }
+
+### R7. Wrong password. EXPECT 401 "Invalid email or password"
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "test1@example.com", "password": "wrong-password" }
+
+### R8. Unknown email. EXPECT 401 with the IDENTICAL body as R7
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "nobody@example.com", "password": "whatever123" }
+
+### R9. Email in other capitals. EXPECT 200 (login is case-insensitive)
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "  TEST1@EXAMPLE.COM ", "password": "correct-horse-1" }
+
+### R10. Missing fields. EXPECT 400
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{}
+
+### R11. Old endpoints still open (temporary). EXPECT 200
+GET {{baseUrl}}/tenants/{{tenantId}}
