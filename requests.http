@@ -1,242 +1,155 @@
 ### =====================================================================
-### appointMe - requests.http  (Days 5-6)
-### Run each request with the green arrow next to it, top to bottom.
-### Write down the status code you get and compare with "EXPECTED".
+### appointMe - requests.http  (Days 5-9)
+### Works with the ids created by scripts/dev-seed.sql
+### Run top to bottom. "EXPECT" tells you the status you should see.
 ### =====================================================================
 
-### Variables - edit if your ids differ (check: SELECT id, name FROM tenants;)
 @baseUrl = http://localhost:8080
+
+### --- Ids from dev-seed.sql -------------------------------------------
 @tenantId = 1
 @otherTenantId = 2
 @serviceId = 1
+@service2Id = 2
+@otherServiceId = 3
+@customerId = 1
+@otherCustomerId = 3
+@staffId = 2
+@otherStaffId = 3
 
 
-### ---------------------------------------------------------------------
+### ======================================================================
 ### TENANTS
-### ---------------------------------------------------------------------
+### ======================================================================
 
-### T1. Create tenant            EXPECTED: 201 (note the id in the response)
-POST {{baseUrl}}/tenants
-Content-Type: application/json
-
-{
-  "name": "Test Barber",
-  "slug": "test-barber",
-  "timezone": "Europe/Athens"
-}
-
-> {% client.global.set("newTenantId", response.body.id); %}
-
-### T2. Get tenant               EXPECTED: 200
+### T1. Get tenant. EXPECT 200
 GET {{baseUrl}}/tenants/{{tenantId}}
 
-### T3. Get missing tenant       EXPECTED: 500 now, 404 after Day 7
+### T2. Create tenant. EXPECT 201 (run once; a second run gives 409)
+POST {{baseUrl}}/tenants
+Content-Type: application/json
+
+{ "name": "Fresh Salon", "slug": "fresh-salon", "timezone": "Europe/Athens" }
+
+### T3. Missing tenant. EXPECT 404
 GET {{baseUrl}}/tenants/9999
 
-### T4. Duplicate slug           EXPECTED: 500 now, 409 after Day 7
+### T4. Duplicate slug. EXPECT 409
 POST {{baseUrl}}/tenants
 Content-Type: application/json
 
-{
-  "name": "Another Barber",
-  "slug": "test-barber",
-  "timezone": "Europe/Athens"
-}
+{ "name": "Copy", "slug": "test-barber", "timezone": "UTC" }
 
-### T5. Slug with capitals/space EXPECTED: 400 (pattern check)
+### T5. Bad slug (capitals/space). EXPECT 400 with errors.slug
 POST {{baseUrl}}/tenants
 Content-Type: application/json
 
-{
-  "name": "Bad Slug",
-  "slug": "Test Barber",
-  "timezone": "UTC"
-}
+{ "name": "Bad Slug", "slug": "Test Barber", "timezone": "UTC" }
 
-### T6. Blank name               EXPECTED: 400
+### T6. Blank name. EXPECT 400
 POST {{baseUrl}}/tenants
 Content-Type: application/json
 
-{
-  "name": "",
-  "slug": "no-name",
-  "timezone": "UTC"
-}
+{ "name": "", "slug": "no-name", "timezone": "UTC" }
 
-### T7. Invalid time zone        EXPECTED: error (400 after Day 7)
-###     Works only if you did the ZoneId.of() exercise.
+### T7. Unknown time zone. EXPECT 400 "Unknown time zone"
 POST {{baseUrl}}/tenants
 Content-Type: application/json
 
-{
-  "name": "Mars Barber",
-  "slug": "mars-barber",
-  "timezone": "Mars/Base"
-}
+{ "name": "Mars Barber", "slug": "mars-barber", "timezone": "Mars/Base" }
 
-### T8. Second tenant (for the isolation test)   EXPECTED: 201
+### T8. Sneaky id in body. EXPECT 201, id is NOT 99
 POST {{baseUrl}}/tenants
 Content-Type: application/json
 
-{
-  "name": "Second Gym",
-  "slug": "second-gym",
-  "timezone": "Europe/London"
-}
+{ "id": 99, "name": "Sneaky", "slug": "sneaky", "timezone": "UTC" }
 
-
-### ---------------------------------------------------------------------
-### SERVICES (Day 6)
-### ---------------------------------------------------------------------
-
-### S1. Valid create             EXPECTED: 201 (note the service id)
-POST {{baseUrl}}/tenants/{{tenantId}}/services
-Content-Type: application/json
-
-{
-  "name": "Haircut",
-  "durationMinutes": 30,
-  "price": 25.00
-}
-
-> {% client.global.set("newServiceId", response.body.id); %}
-
-### S2. Blank name              EXPECTED: 400
-POST {{baseUrl}}/tenants/{{tenantId}}/services
-Content-Type: application/json
-
-{
-  "name": "",
-  "durationMinutes": 30,
-  "price": 25.00
-}
-
-### S3. Negative duration       EXPECTED: 400
-POST {{baseUrl}}/tenants/{{tenantId}}/services
-Content-Type: application/json
-
-{
-  "name": "Haircut",
-  "durationMinutes": -5,
-  "price": 25.00
-}
-
-### S4. Missing price          EXPECTED: 400
-POST {{baseUrl}}/tenants/{{tenantId}}/services
-Content-Type: application/json
-
-{
-  "name": "Haircut",
-  "durationMinutes": 30
-}
-
-### S5. Negative price         EXPECTED: 400
-POST {{baseUrl}}/tenants/{{tenantId}}/services
-Content-Type: application/json
-
-{
-  "name": "Haircut",
-  "durationMinutes": 30,
-  "price": -1
-}
-
-### S6. Missing duration       EXPECTED: 400 (this is why the field is Integer, not int)
-POST {{baseUrl}}/tenants/{{tenantId}}/services
-Content-Type: application/json
-
-{
-  "name": "Haircut",
-  "price": 25.00
-}
-
-### S7. List services          EXPECTED: 200, array
-GET {{baseUrl}}/tenants/{{tenantId}}/services
-
-### S8. Get one service       EXPECTED: 200
-GET {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
-
-### S9. Get missing service    EXPECTED: 500 now, 404 after Day 7
-GET {{baseUrl}}/tenants/{{tenantId}}/services/9999
-
-### S10. Update (change price) EXPECTED: 200, new price in the body
-PUT {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
-Content-Type: application/json
-
-{
-  "name": "Haircut",
-  "durationMinutes": 45,
-  "price": 30.00,
-  "active": true
-}
-
-### S11. Delete (soft)        EXPECTED: 204, row stays with active = false
-DELETE {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
-
-### S12. List after delete    EXPECTED: 200 (inactive one still shown unless you did the active-filter exercise)
-GET {{baseUrl}}/tenants/{{tenantId}}/services
-
-
-### ---------------------------------------------------------------------
-### ISOLATION CHECK
-### ---------------------------------------------------------------------
-
-### I1. Read tenant A's service through tenant B's URL
-###     EXPECTED: NOT the data (500 now, 404 after Day 7)
-GET {{baseUrl}}/tenants/{{otherTenantId}}/services/{{serviceId}}
-
-### I2. Update tenant A's service through tenant B's URL
-###     EXPECTED: NOT found, and the service stays unchanged
-PUT {{baseUrl}}/tenants/{{otherTenantId}}/services/{{serviceId}}
-Content-Type: application/json
-
-{
-  "name": "Hacked",
-  "durationMinutes": 1,
-  "price": 0.00,
-  "active": true
-}
-
-### I3. Delete tenant A's service through tenant B's URL
-###     EXPECTED: NOT found, and active stays true
-DELETE {{baseUrl}}/tenants/{{otherTenantId}}/services/{{serviceId}}
-
-
-### ---------------------------------------------------------------------
-### EXTRA EXPERIMENTS
-### ---------------------------------------------------------------------
-
-### X1. Try to sneak in an id   EXPECTED: 201, but the id in the body is ignored
-POST {{baseUrl}}/tenants
-Content-Type: application/json
-
-{
-  "id": 99,
-  "name": "Sneaky",
-  "slug": "sneaky",
-  "timezone": "UTC"
-}
-
-### X2. Empty body             EXPECTED: 400
+### T9. Empty body. EXPECT 400
 POST {{baseUrl}}/tenants
 Content-Type: application/json
 
 {}
 
-### X3. Missing Content-Type   EXPECTED: 415
+### T10. No Content-Type header. EXPECT 415
 POST {{baseUrl}}/tenants
 
 {"name":"x","slug":"x"}
 
 
-### C1. Create customer. EXPECT 201, email saved lowercase: "ann@example.com"
+### ======================================================================
+### SERVICES
+### ======================================================================
+
+### S1. Create service. EXPECT 201
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{ "name": "Shave", "durationMinutes": 20, "price": 12.50 }
+
+### S2. Blank name. EXPECT 400
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{ "name": "", "durationMinutes": 30, "price": 25.00 }
+
+### S3. Negative duration. EXPECT 400
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{ "name": "Haircut", "durationMinutes": -5, "price": 25.00 }
+
+### S4. Missing price. EXPECT 400
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{ "name": "Haircut", "durationMinutes": 30 }
+
+### S5. Missing duration. EXPECT 400
+POST {{baseUrl}}/tenants/{{tenantId}}/services
+Content-Type: application/json
+
+{ "name": "Haircut", "price": 25.00 }
+
+### S6. List. EXPECT 200, tenant 1's services only
+GET {{baseUrl}}/tenants/{{tenantId}}/services
+
+### S7. Get one. EXPECT 200
+GET {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+
+### S8. Missing service. EXPECT 404
+GET {{baseUrl}}/tenants/{{tenantId}}/services/9999
+
+### S9. Update. EXPECT 200, new price in body
+PUT {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+Content-Type: application/json
+
+{ "name": "Haircut", "durationMinutes": 30, "price": 28.00, "active": true }
+
+### S10. ISOLATION: tenant 2's URL, tenant 1's service. EXPECT 404
+GET {{baseUrl}}/tenants/{{otherTenantId}}/services/{{serviceId}}
+
+### S11. ISOLATION: update through the wrong tenant. EXPECT 404, data unchanged
+PUT {{baseUrl}}/tenants/{{otherTenantId}}/services/{{serviceId}}
+Content-Type: application/json
+
+{ "name": "Hacked", "durationMinutes": 1, "price": 0.00, "active": true }
+
+### S12. Soft delete the extra service (Beard Trim). EXPECT 204, row stays with active=false
+###      (run dev-seed.sql again afterwards to get it back)
+DELETE {{baseUrl}}/tenants/{{tenantId}}/services/{{service2Id}}
+
+
+### ======================================================================
+### CUSTOMERS
+### ======================================================================
+
+### C1. Create. EXPECT 201, email saved lowercase
 POST {{baseUrl}}/tenants/{{tenantId}}/customers
 Content-Type: application/json
 
-{ "fullName": "Ann Smith", "email": "Ann@Example.com", "phone": "6900000001" }
+{ "fullName": "Cara Lee", "email": "Cara@Example.com", "phone": "6900000010" }
 
-> {% client.global.set("customerId", response.body.id); %}
-
-### C2. Duplicate email, different capitals. EXPECT 409
+### C2. Duplicate email (different case). EXPECT 409
 POST {{baseUrl}}/tenants/{{tenantId}}/customers
 Content-Type: application/json
 
@@ -248,90 +161,137 @@ Content-Type: application/json
 
 { "fullName": "", "email": "not-an-email" }
 
-### C4a. No email. EXPECT 201 (email is null in the response)
+### C4. No email. EXPECT 201; run it twice, both succeed
 POST {{baseUrl}}/tenants/{{tenantId}}/customers
 Content-Type: application/json
 
 { "fullName": "Walk-in Customer" }
 
-### C4b. Run C4a again. EXPECT 201 again (many customers may have no email)
-POST {{baseUrl}}/tenants/{{tenantId}}/customers
-Content-Type: application/json
-
-{ "fullName": "Walk-in Customer" }
-
-### C4c. Blank email string. EXPECT 201, saved as null (not "")
-POST {{baseUrl}}/tenants/{{tenantId}}/customers
-Content-Type: application/json
-
-{ "fullName": "Blank Email Person", "email": "   " }
-
-### C5. Search + page + sort. EXPECT 200, content has only names containing "ann"
+### C5. Search + page + sort. EXPECT 200, only names containing "ann"
 GET {{baseUrl}}/tenants/{{tenantId}}/customers?name=ann&page=0&size=10&sort=fullName,asc
 
-### C5b. Search is case-insensitive. EXPECT same result as C5
-GET {{baseUrl}}/tenants/{{tenantId}}/customers?name=ANN
+### C6. Page 1. EXPECT different rows than page 0
+GET {{baseUrl}}/tenants/{{tenantId}}/customers?page=1&size=2
 
-### C5c. Empty name = no filter. EXPECT every customer, paged
-GET {{baseUrl}}/tenants/{{tenantId}}/customers?name=
-
-### C6. Page 0, size 10. EXPECT 10 items, page 0, totalElements 28+, totalPages 3+
-GET {{baseUrl}}/tenants/{{tenantId}}/customers?page=0&size=10
-
-### C6b. Page 1. EXPECT 10 DIFFERENT items than C6
-GET {{baseUrl}}/tenants/{{tenantId}}/customers?page=1&size=10
-
-### C6c. Page far past the end. EXPECT 200 with "content": []
-GET {{baseUrl}}/tenants/{{tenantId}}/customers?page=999&size=10
-
-### C6d. Descending sort. EXPECT 'Walk-in Customer' / names later in the alphabet first
-GET {{baseUrl}}/tenants/{{tenantId}}/customers?sort=fullName,desc&size=5
-
-### C6e. Size cap. EXPECT "size": 100 in the response, not 100000
+### C7. Size cap. EXPECT "size": 100
 GET {{baseUrl}}/tenants/{{tenantId}}/customers?size=100000
 
-### C7. Bad sort field. EXPECT 400 "Cannot sort by 'nonsense'" (not 500)
+### C8. Bad sort field. EXPECT 400
 GET {{baseUrl}}/tenants/{{tenantId}}/customers?sort=nonsense
 
-### C8. Get one. EXPECT 200
+### C9. Get one. EXPECT 200
 GET {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
 
-### C8b. Missing id. EXPECT 404
-GET {{baseUrl}}/tenants/{{tenantId}}/customers/999999
-
-### C9. ISOLATION: read tenant 1's customer through tenant 2's URL. EXPECT 404
+### C10. ISOLATION: tenant 2's URL, tenant 1's customer. EXPECT 404
 GET {{baseUrl}}/tenants/{{otherTenantId}}/customers/{{customerId}}
 
-### C9b. ISOLATION: tenant 2 list must not contain tenant 1's customers. EXPECT empty content
-GET {{baseUrl}}/tenants/{{otherTenantId}}/customers
-
-### C10. Update, keeping the SAME email. EXPECT 200 (must not conflict with itself)
+### C11. Update keeping the same email. EXPECT 200
 PUT {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
 Content-Type: application/json
 
 { "fullName": "Ann Smith-Jones", "email": "ann@example.com", "phone": "6900000099" }
 
-### C10b. Update to an email another customer owns. EXPECT 409
+### C12. Update to another customer's email (Ben). EXPECT 409
 PUT {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
 Content-Type: application/json
 
-{ "fullName": "Ann Smith-Jones", "email": "c1@test.com" }
+{ "fullName": "Ann Smith-Jones", "email": "ben@example.com" }
 
-### C10c. Update with invalid body. EXPECT 400
-PUT {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+
+### ======================================================================
+### APPOINTMENTS  (dates must be in the future; today is 2026-10-13)
+### ======================================================================
+
+### A1. Create. EXPECT 201, endsAt = startsAt + 30 min (Haircut)
+POST {{baseUrl}}/tenants/{{tenantId}}/appointments
 Content-Type: application/json
 
-{ "fullName": "" }
+{
+  "staffId": {{staffId}},
+  "customerId": {{customerId}},
+  "serviceId": {{serviceId}},
+  "startsAt": "2026-10-20T09:00:00Z",
+  "notes": "First visit"
+}
 
-### C11. Delete. EXPECT 204
-DELETE {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+### A1b. Second appointment, 15-min service. EXPECT 201, endsAt = 10:15
+POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+Content-Type: application/json
 
-### C11b. Delete again. EXPECT 404
-DELETE {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+{
+  "staffId": {{staffId}},
+  "customerId": 2,
+  "serviceId": {{service2Id}},
+  "startsAt": "2026-10-20T10:00:00Z"
+}
 
-### C11c. ISOLATION: delete another tenant's customer through your URL. EXPECT 404
-DELETE {{baseUrl}}/tenants/{{otherTenantId}}/customers/1
+### A2. In the past. EXPECT 400, errors.startsAt
+POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+Content-Type: application/json
 
-### N1. EXPECT 200 and a long console log: one "select ... from customers",
-###     then one "select ... from tenants where id=?" per distinct tenant
-GET {{baseUrl}}/debug/n-plus-one
+{ "staffId": {{staffId}}, "customerId": {{customerId}}, "serviceId": {{serviceId}},
+  "startsAt": "2020-01-01T09:00:00Z" }
+
+### A3. Missing fields. EXPECT 400 with several errors
+POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+Content-Type: application/json
+
+{ "startsAt": "2026-10-20T11:00:00Z" }
+
+### A4. ATTACK: staff member from another tenant. EXPECT 404
+POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+Content-Type: application/json
+
+{ "staffId": {{otherStaffId}}, "customerId": {{customerId}}, "serviceId": {{serviceId}},
+  "startsAt": "2026-10-20T11:00:00Z" }
+
+### A5. ATTACK: customer from another tenant. EXPECT 404
+POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+Content-Type: application/json
+
+{ "staffId": {{staffId}}, "customerId": {{otherCustomerId}}, "serviceId": {{serviceId}},
+  "startsAt": "2026-10-20T11:00:00Z" }
+
+### A5b. ATTACK: service from another tenant. EXPECT 404
+POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+Content-Type: application/json
+
+{ "staffId": {{staffId}}, "customerId": {{customerId}}, "serviceId": {{otherServiceId}},
+  "startsAt": "2026-10-20T11:00:00Z" }
+
+### A6. Inactive service. EXPECT 400 (run S12 first, which deactivates service 2)
+POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+Content-Type: application/json
+
+{ "staffId": {{staffId}}, "customerId": {{customerId}}, "serviceId": {{service2Id}},
+  "startsAt": "2026-10-20T12:00:00Z" }
+
+### A7. List a range. EXPECT 200, array sorted by startsAt
+GET {{baseUrl}}/tenants/{{tenantId}}/appointments?from=2026-10-01T00:00:00Z&to=2026-11-01T00:00:00Z
+
+### A8. Range too big. EXPECT 400
+GET {{baseUrl}}/tenants/{{tenantId}}/appointments?from=2026-01-01T00:00:00Z&to=2026-12-31T00:00:00Z
+
+### A9. from after to. EXPECT 400
+GET {{baseUrl}}/tenants/{{tenantId}}/appointments?from=2026-11-01T00:00:00Z&to=2026-10-01T00:00:00Z
+
+### A10. Mark appointment 1 completed. EXPECT 200, status COMPLETED
+PATCH {{baseUrl}}/tenants/{{tenantId}}/appointments/1/status
+Content-Type: application/json
+
+{ "status": "COMPLETED" }
+
+### A11. Change it again. EXPECT 409 (COMPLETED is final)
+PATCH {{baseUrl}}/tenants/{{tenantId}}/appointments/1/status
+Content-Type: application/json
+
+{ "status": "NO_SHOW" }
+
+### A12. Unknown status value. EXPECT 400
+PATCH {{baseUrl}}/tenants/{{tenantId}}/appointments/1/status
+Content-Type: application/json
+
+{ "status": "BANANA" }
+
+### A13. ISOLATION: tenant 2's URL, tenant 1's appointment. EXPECT 404
+GET {{baseUrl}}/tenants/{{otherTenantId}}/appointments/1
