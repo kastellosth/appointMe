@@ -2,28 +2,29 @@ package com.kastellosth.appointme.controller;
 
 import com.kastellosth.appointme.dto.TenantRequest;
 import com.kastellosth.appointme.dto.TenantResponse;
+import com.kastellosth.appointme.security.CurrentUser;
 import com.kastellosth.appointme.service.TenantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
 @RestController
 @RequestMapping("/tenants")
 @RequiredArgsConstructor
 public class TenantController {
 
     private final TenantService tenantService;
+    private final CurrentUser currentUser;
 
     @PostMapping
     public ResponseEntity<TenantResponse> create(@Valid @RequestBody TenantRequest request) {
-        TenantResponse created = tenantService.create(request);
+        TenantResponse created = tenantService.create(currentUser.userId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    @GetMapping("/{id}")
-    public TenantResponse getById(@PathVariable Long id) {
-        return tenantService.getById(id);
+    @GetMapping("/current")
+    public TenantResponse current() {
+        return tenantService.getById(currentUser.tenantId());
     }
 }

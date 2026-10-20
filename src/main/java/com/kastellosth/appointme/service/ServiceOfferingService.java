@@ -1,4 +1,4 @@
-package com.kastellosth.appointme.servicie;
+package com.kastellosth.appointme.service;
 
 import com.kastellosth.appointme.dto.ServiceOfferingRequest;
 import com.kastellosth.appointme.dto.ServiceOfferingResponse;

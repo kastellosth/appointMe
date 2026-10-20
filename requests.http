@@ -1,16 +1,20 @@
 ### =====================================================================
-### appointMe - requests.http  (Days 5-11)
-### Works with the ids created by scripts/dev-seed.sql
-### RUN L1 (LOGIN) FIRST: it stores the token every other request sends.
-### Tokens expire (30 min): if you suddenly get 401s, run L1 again.
+### appointMe - requests.http  (Days 5-12)
+### Since Day 12 the tenant comes from the TOKEN, not from the URL.
+###
+### HOW TO RUN
+###   1. Load scripts/dev-seed.sql (Alice, Bob, tenants 1-2, sample data).
+###   2. Run L1 (login) and then SEL1 (select tenant 1). Both store {{token}}.
+###   3. Everything under SERVICES / CUSTOMERS / APPOINTMENTS uses {{token}}.
+###   4. The FOUNDER and BOB sections keep their OWN tokens, so they never
+###      overwrite Alice's.
+### Tokens last 30 minutes. Sudden 401s => run L1 and SEL1 again.
 ### "EXPECT" tells you the status you should see.
 ### =====================================================================
 
 @baseUrl = http://localhost:8080
 
 ### --- Ids from dev-seed.sql -------------------------------------------
-@tenantId = 1
-@otherTenantId = 2
 @serviceId = 1
 @service2Id = 2
 @otherServiceId = 3
@@ -24,13 +28,16 @@
 ### AUTH  (Days 10-11)
 ### ======================================================================
 
-### L1. LOGIN as Alice (seeded user). EXPECT 200 with accessToken; stores {{token}}
+### L1. LOGIN as Alice. EXPECT 200 with accessToken (a USER token, no tenant yet)
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 { "email": "alice@test.com", "password": "correct-horse-1" }
 
-> {% client.global.set("token", response.body.accessToken); %}
+> {%
+    client.global.set("userToken", response.body.accessToken);
+    client.global.set("token", response.body.accessToken);
+%}
 
 ### L2. Wrong password. EXPECT 401 "Invalid email or password"
 POST {{baseUrl}}/auth/login
@@ -44,7 +51,7 @@ Content-Type: application/json
 
 { "email": "nobody@example.com", "password": "whatever123" }
 
-### L4. Login is case-insensitive on email. EXPECT 200
+### L4. Email in other capitals. EXPECT 200
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
@@ -56,202 +63,143 @@ Content-Type: application/json
 
 {}
 
-### R1. Register. EXPECT 201, no password/hash in the response (run once; rerun gives 409)
-POST {{baseUrl}}/auth/register
-Content-Type: application/json
-
-{ "email": "Test1@Example.com", "password": "correct-horse-1", "fullName": "Test One" }
-
-### R2. Duplicate email, other capitals. EXPECT 409
-POST {{baseUrl}}/auth/register
-Content-Type: application/json
-
-{ "email": "TEST1@example.com", "password": "correct-horse-1", "fullName": "Clone" }
-
-### R3. Password too short. EXPECT 400, errors.password
+### R1. Password too short. EXPECT 400, errors.password
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
 { "email": "short@example.com", "password": "abc", "fullName": "Shorty" }
 
-### R4. Bad email + blank name. EXPECT 400, errors for email and fullName
+### R2. Bad email + blank name. EXPECT 400, errors for email and fullName
 POST {{baseUrl}}/auth/register
 Content-Type: application/json
 
 { "email": "nope", "password": "correct-horse-1", "fullName": "" }
 
-### ----------------------------------------------------------------------
-### TOKEN CHECKS (Day 11). These deliberately use odd Authorization headers.
-### ----------------------------------------------------------------------
 
-### J1. Who am I? EXPECT 200, Alice's user object (read from the token)
+### ======================================================================
+### TOKEN CHECKS  (Day 11)
+### ======================================================================
+
+### J1. Who am I? EXPECT 200, Alice
 GET {{baseUrl}}/auth/me
 Authorization: Bearer {{token}}
 
-### J2. No token at all. EXPECT 401 (JSON body, WWW-Authenticate: Bearer)
-GET {{baseUrl}}/tenants/{{tenantId}}
+### J2. No token. EXPECT 401 (JSON body, WWW-Authenticate: Bearer)
+GET {{baseUrl}}/services
 
 ### J3. Garbage token. EXPECT 401
-GET {{baseUrl}}/tenants/{{tenantId}}
+GET {{baseUrl}}/services
 Authorization: Bearer this.is.not-a-token
 
-### J4. Wrong scheme (Basic instead of Bearer). EXPECT 401
-GET {{baseUrl}}/tenants/{{tenantId}}
+### J4. Wrong scheme (Basic). EXPECT 401
+GET {{baseUrl}}/services
 Authorization: Basic YWxpY2U6cGFzcw==
 
 ### J5. Unsigned "alg":"none" token claiming to be user 1. EXPECT 401
-###     (the classic forgery attempt: your decoder is pinned to HS256 and refuses it)
 GET {{baseUrl}}/auth/me
 Authorization: Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiIxIn0.
 
-### J6. TAMPERED token. Run L1, copy the token from the response, then paste it
-###     below after changing ONE character in the middle (payload) section.
-###     EXPECT 401 (signature no longer matches)
+### J6. TAMPERED token: paste a real token with one changed character. EXPECT 401
 GET {{baseUrl}}/auth/me
 Authorization: Bearer PASTE.TAMPERED.TOKEN.HERE
 
-### J7. Public endpoints stay public. EXPECT 401 for login-less GET but register/login work (see R1/L1)
 
 ### ======================================================================
-### TENANTS
+### TENANT CONTEXT  (Day 12)
 ### ======================================================================
 
-### T1. Get tenant. EXPECT 200
-GET {{baseUrl}}/tenants/{{tenantId}}
+### M1. Which businesses am I in? EXPECT 200, [ tenant 1 "Test Barber", role OWNER ]
+GET {{baseUrl}}/auth/memberships
+Authorization: Bearer {{userToken}}
+
+### M2. Business endpoint with a USER token (no tenant chosen yet).
+###     EXPECT 403 "No business selected"
+GET {{baseUrl}}/services
+Authorization: Bearer {{userToken}}
+
+### SEL1. Select tenant 1. EXPECT 200, accessToken + tenantId 1 + role OWNER.
+###       Stores the TENANT token as {{token}}.
+POST {{baseUrl}}/auth/select-tenant/1
+Authorization: Bearer {{userToken}}
+
+> {%
+    client.global.set("token", response.body.accessToken);
+%}
+
+### SEL2. Alice is NOT a member of tenant 2. EXPECT 404 (not 403: don't confirm it exists)
+POST {{baseUrl}}/auth/select-tenant/2
+Authorization: Bearer {{userToken}}
+
+### SEL3. Tenant that doesn't exist. EXPECT 404, same body as SEL2
+POST {{baseUrl}}/auth/select-tenant/9999
+Authorization: Bearer {{userToken}}
+
+### SEL4. Current business, read from the token. EXPECT 200, "Test Barber"
+GET {{baseUrl}}/tenants/current
 Authorization: Bearer {{token}}
 
-### T2. Create tenant. EXPECT 201 (run once; a second run gives 409)
-POST {{baseUrl}}/tenants
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "name": "Fresh Salon", "slug": "fresh-salon", "timezone": "Europe/Athens" }
-
-### T3. Missing tenant. EXPECT 404
-GET {{baseUrl}}/tenants/9999
+### SEL5. The old /tenants/{id} route is gone. EXPECT 404
+GET {{baseUrl}}/tenants/2
 Authorization: Bearer {{token}}
 
-### T4. Duplicate slug. EXPECT 409
-POST {{baseUrl}}/tenants
+### SEL6. Old URL style no longer exists. EXPECT 404
+GET {{baseUrl}}/tenants/1/services
 Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "name": "Copy", "slug": "test-barber", "timezone": "UTC" }
-
-### T5. Bad slug (capitals/space). EXPECT 400 with errors.slug
-POST {{baseUrl}}/tenants
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "name": "Bad Slug", "slug": "Test Barber", "timezone": "UTC" }
-
-### T6. Blank name. EXPECT 400
-POST {{baseUrl}}/tenants
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "name": "", "slug": "no-name", "timezone": "UTC" }
-
-### T7. Unknown time zone. EXPECT 400 "Unknown time zone"
-POST {{baseUrl}}/tenants
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "name": "Mars Barber", "slug": "mars-barber", "timezone": "Mars/Base" }
-
-### T8. Sneaky id in body. EXPECT 201, id is NOT 99
-POST {{baseUrl}}/tenants
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "id": 99, "name": "Sneaky", "slug": "sneaky", "timezone": "UTC" }
-
-### T9. Empty body. EXPECT 400
-POST {{baseUrl}}/tenants
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{}
-
-### T10. No Content-Type header. EXPECT 415
-POST {{baseUrl}}/tenants
-Authorization: Bearer {{token}}
-
-{"name":"x","slug":"x"}
 
 
 ### ======================================================================
-### SERVICES
+### SERVICES  (tenant comes from {{token}})
 ### ======================================================================
 
-### S1. Create service. EXPECT 201
-POST {{baseUrl}}/tenants/{{tenantId}}/services
+### S1. Create. EXPECT 201
+POST {{baseUrl}}/services
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "name": "Shave", "durationMinutes": 20, "price": 12.50 }
 
 ### S2. Blank name. EXPECT 400
-POST {{baseUrl}}/tenants/{{tenantId}}/services
+POST {{baseUrl}}/services
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "name": "", "durationMinutes": 30, "price": 25.00 }
 
 ### S3. Negative duration. EXPECT 400
-POST {{baseUrl}}/tenants/{{tenantId}}/services
+POST {{baseUrl}}/services
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "name": "Haircut", "durationMinutes": -5, "price": 25.00 }
 
 ### S4. Missing price. EXPECT 400
-POST {{baseUrl}}/tenants/{{tenantId}}/services
+POST {{baseUrl}}/services
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "name": "Haircut", "durationMinutes": 30 }
 
-### S5. Missing duration. EXPECT 400
-POST {{baseUrl}}/tenants/{{tenantId}}/services
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "name": "Haircut", "price": 25.00 }
-
-### S6. List. EXPECT 200, tenant 1's services only
-GET {{baseUrl}}/tenants/{{tenantId}}/services
+### S5. List. EXPECT 200, ONLY tenant 1's services (Haircut, Beard Trim, + any you created)
+GET {{baseUrl}}/services
 Authorization: Bearer {{token}}
 
-### S7. Get one. EXPECT 200
-GET {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+### S6. Get one. EXPECT 200
+GET {{baseUrl}}/services/{{serviceId}}
 Authorization: Bearer {{token}}
 
-### S8. Missing service. EXPECT 404
-GET {{baseUrl}}/tenants/{{tenantId}}/services/9999
+### S7. Missing service. EXPECT 404
+GET {{baseUrl}}/services/9999
 Authorization: Bearer {{token}}
 
-### S9. Update. EXPECT 200, new price in body
-PUT {{baseUrl}}/tenants/{{tenantId}}/services/{{serviceId}}
+### S8. Update. EXPECT 200, new price
+PUT {{baseUrl}}/services/{{serviceId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "name": "Haircut", "durationMinutes": 30, "price": 28.00, "active": true }
 
-### S10. ISOLATION: tenant 2's URL, tenant 1's service. EXPECT 404
-GET {{baseUrl}}/tenants/{{otherTenantId}}/services/{{serviceId}}
-Authorization: Bearer {{token}}
-
-### S11. ISOLATION: update through the wrong tenant. EXPECT 404, data unchanged
-PUT {{baseUrl}}/tenants/{{otherTenantId}}/services/{{serviceId}}
-Authorization: Bearer {{token}}
-Content-Type: application/json
-
-{ "name": "Hacked", "durationMinutes": 1, "price": 0.00, "active": true }
-
-### S12. Soft delete the extra service (Beard Trim). EXPECT 204, row stays with active=false
-###      (run dev-seed.sql again afterwards to get it back)
-DELETE {{baseUrl}}/tenants/{{tenantId}}/services/{{service2Id}}
+### S9. Soft delete Beard Trim. EXPECT 204 (rerun dev-seed.sql to restore it)
+DELETE {{baseUrl}}/services/{{service2Id}}
 Authorization: Bearer {{token}}
 
 
@@ -260,66 +208,58 @@ Authorization: Bearer {{token}}
 ### ======================================================================
 
 ### C1. Create. EXPECT 201, email saved lowercase
-POST {{baseUrl}}/tenants/{{tenantId}}/customers
+POST {{baseUrl}}/customers
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "fullName": "Cara Lee", "email": "Cara@Example.com", "phone": "6900000010" }
 
-### C2. Duplicate email (different case). EXPECT 409
-POST {{baseUrl}}/tenants/{{tenantId}}/customers
+### C2. Duplicate email (other capitals). EXPECT 409
+POST {{baseUrl}}/customers
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "fullName": "Another Ann", "email": "ANN@example.com" }
 
-### C3. Blank name + bad email. EXPECT 400, errors for fullName and email
-POST {{baseUrl}}/tenants/{{tenantId}}/customers
+### C3. Blank name + bad email. EXPECT 400
+POST {{baseUrl}}/customers
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "fullName": "", "email": "not-an-email" }
 
-### C4. No email. EXPECT 201; run it twice, both succeed
-POST {{baseUrl}}/tenants/{{tenantId}}/customers
+### C4. No email. EXPECT 201 (run twice: both succeed)
+POST {{baseUrl}}/customers
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "fullName": "Walk-in Customer" }
 
-### C5. Search + page + sort. EXPECT 200, only names containing "ann"
-GET {{baseUrl}}/tenants/{{tenantId}}/customers?name=ann&page=0&size=10&sort=fullName,asc
-Authorization: Bearer {{token}}
-### C6. Page 1. EXPECT different rows than page 0
-
-GET {{baseUrl}}/tenants/{{tenantId}}/customers?page=1&size=2
+### C5. Search + page + sort. EXPECT 200, names containing "ann"
+GET {{baseUrl}}/customers?name=ann&page=0&size=10&sort=fullName,asc
 Authorization: Bearer {{token}}
 
-### C7. Size cap. EXPECT "size": 100
-GET {{baseUrl}}/tenants/{{tenantId}}/customers?size=100000
+### C6. Size cap. EXPECT "size": 100
+GET {{baseUrl}}/customers?size=100000
 Authorization: Bearer {{token}}
 
-### C8. Bad sort field. EXPECT 400
-GET {{baseUrl}}/tenants/{{tenantId}}/customers?sort=nonsense
+### C7. Bad sort field. EXPECT 400
+GET {{baseUrl}}/customers?sort=nonsense
 Authorization: Bearer {{token}}
 
-### C9. Get one. EXPECT 200
-GET {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+### C8. Get one. EXPECT 200
+GET {{baseUrl}}/customers/{{customerId}}
 Authorization: Bearer {{token}}
 
-### C10. ISOLATION: tenant 2's URL, tenant 1's customer. EXPECT 404
-GET {{baseUrl}}/tenants/{{otherTenantId}}/customers/{{customerId}}
-Authorization: Bearer {{token}}
-
-### C11. Update keeping the same email. EXPECT 200
-PUT {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+### C9. Update keeping the same email. EXPECT 200
+PUT {{baseUrl}}/customers/{{customerId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "fullName": "Ann Smith-Jones", "email": "ann@example.com", "phone": "6900000099" }
 
-### C12. Update to another customer's email (Ben). EXPECT 409
-PUT {{baseUrl}}/tenants/{{tenantId}}/customers/{{customerId}}
+### C10. Update to Ben's email. EXPECT 409
+PUT {{baseUrl}}/customers/{{customerId}}
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -327,11 +267,11 @@ Content-Type: application/json
 
 
 ### ======================================================================
-### APPOINTMENTS  (dates must be in the future; today is 2026-10-13)
+### APPOINTMENTS  (use dates in the FUTURE; today is 2026-10-20)
 ### ======================================================================
 
 ### A1. Create. EXPECT 201, endsAt = startsAt + 30 min (Haircut)
-POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+POST {{baseUrl}}/appointments
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
@@ -339,102 +279,265 @@ Content-Type: application/json
   "staffId": {{staffId}},
   "customerId": {{customerId}},
   "serviceId": {{serviceId}},
-  "startsAt": "2026-10-20T09:00:00Z",
+  "startsAt": "2026-11-10T09:00:00Z",
   "notes": "First visit"
 }
 
-### A1b. Second appointment, 15-min service. EXPECT 201, endsAt = 10:15
-POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+### A1b. 15-minute service. EXPECT 201, endsAt = 10:15
+POST {{baseUrl}}/appointments
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{
-  "staffId": {{staffId}},
-  "customerId": 2,
-  "serviceId": {{service2Id}},
-  "startsAt": "2026-10-20T10:00:00Z"
-}
+{ "staffId": {{staffId}}, "customerId": 2, "serviceId": {{service2Id}},
+  "startsAt": "2026-11-10T10:00:00Z" }
 
 ### A2. In the past. EXPECT 400, errors.startsAt
-POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+POST {{baseUrl}}/appointments
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "staffId": {{staffId}}, "customerId": {{customerId}}, "serviceId": {{serviceId}},
   "startsAt": "2020-01-01T09:00:00Z" }
 
-### A3. Missing fields. EXPECT 400 with several errors
-POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+### A3. Missing fields. EXPECT 400, several errors
+POST {{baseUrl}}/appointments
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
-{ "startsAt": "2026-10-20T11:00:00Z" }
+{ "startsAt": "2026-11-10T11:00:00Z" }
 
-### A4. ATTACK: staff member from another tenant. EXPECT 404
-POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+### A4. ATTACK: staff member of another tenant. EXPECT 404
+POST {{baseUrl}}/appointments
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "staffId": {{otherStaffId}}, "customerId": {{customerId}}, "serviceId": {{serviceId}},
-  "startsAt": "2026-10-20T11:00:00Z" }
+  "startsAt": "2026-11-10T11:00:00Z" }
 
-### A5. ATTACK: customer from another tenant. EXPECT 404
-POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+### A5. ATTACK: customer of another tenant. EXPECT 404
+POST {{baseUrl}}/appointments
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "staffId": {{staffId}}, "customerId": {{otherCustomerId}}, "serviceId": {{serviceId}},
-  "startsAt": "2026-10-20T11:00:00Z" }
+  "startsAt": "2026-11-10T11:00:00Z" }
 
-### A5b. ATTACK: service from another tenant. EXPECT 404
-POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+### A5b. ATTACK: service of another tenant. EXPECT 404
+POST {{baseUrl}}/appointments
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "staffId": {{staffId}}, "customerId": {{customerId}}, "serviceId": {{otherServiceId}},
-  "startsAt": "2026-10-20T11:00:00Z" }
+  "startsAt": "2026-11-10T11:00:00Z" }
 
-### A6. Inactive service. EXPECT 400 (run S12 first, which deactivates service 2)
-POST {{baseUrl}}/tenants/{{tenantId}}/appointments
+### A6. Inactive service. EXPECT 400 (run S9 first, which deactivates service 2)
+POST {{baseUrl}}/appointments
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "staffId": {{staffId}}, "customerId": {{customerId}}, "serviceId": {{service2Id}},
-  "startsAt": "2026-10-20T12:00:00Z" }
+  "startsAt": "2026-11-10T12:00:00Z" }
 
-### A7. List a range. EXPECT 200, array sorted by startsAt
-GET {{baseUrl}}/tenants/{{tenantId}}/appointments?from=2026-10-01T00:00:00Z&to=2026-11-01T00:00:00Z
+### A7. List a range. EXPECT 200, sorted by startsAt
+GET {{baseUrl}}/appointments?from=2026-11-01T00:00:00Z&to=2026-12-01T00:00:00Z
 Authorization: Bearer {{token}}
 
 ### A8. Range too big. EXPECT 400
-GET {{baseUrl}}/tenants/{{tenantId}}/appointments?from=2026-01-01T00:00:00Z&to=2026-12-31T00:00:00Z
+GET {{baseUrl}}/appointments?from=2026-01-01T00:00:00Z&to=2026-12-31T00:00:00Z
 Authorization: Bearer {{token}}
 
 ### A9. from after to. EXPECT 400
-GET {{baseUrl}}/tenants/{{tenantId}}/appointments?from=2026-11-01T00:00:00Z&to=2026-10-01T00:00:00Z
+GET {{baseUrl}}/appointments?from=2026-12-01T00:00:00Z&to=2026-11-01T00:00:00Z
 Authorization: Bearer {{token}}
 
-### A10. Mark appointment 1 completed. EXPECT 200, status COMPLETED
-PATCH {{baseUrl}}/tenants/{{tenantId}}/appointments/1/status
+### A10. Mark appointment 1 completed. EXPECT 200
+PATCH {{baseUrl}}/appointments/1/status
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "status": "COMPLETED" }
 
 ### A11. Change it again. EXPECT 409 (COMPLETED is final)
-PATCH {{baseUrl}}/tenants/{{tenantId}}/appointments/1/status
+PATCH {{baseUrl}}/appointments/1/status
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "status": "NO_SHOW" }
 
-### A12. Unknown status value. EXPECT 400
-PATCH {{baseUrl}}/tenants/{{tenantId}}/appointments/1/status
+### A12. Unknown status. EXPECT 400
+PATCH {{baseUrl}}/appointments/1/status
 Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "status": "BANANA" }
 
-### A13. ISOLATION: tenant 2's URL, tenant 1's appointment. EXPECT 404
-GET {{baseUrl}}/tenants/{{otherTenantId}}/appointments/1
+
+### ======================================================================
+### ISOLATION as Alice (tenant 1 token). The URL can no longer name a tenant,
+### so the only attack left is guessing OTHER tenants' record ids.
+### ======================================================================
+
+### ISO1. Tenant 2's service by id. EXPECT 404
+GET {{baseUrl}}/services/{{otherServiceId}}
 Authorization: Bearer {{token}}
+
+### ISO2. Update tenant 2's service. EXPECT 404
+PUT {{baseUrl}}/services/{{otherServiceId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "name": "Hacked", "durationMinutes": 1, "price": 0.00, "active": true }
+
+### ISO3. Delete tenant 2's service. EXPECT 404
+DELETE {{baseUrl}}/services/{{otherServiceId}}
+Authorization: Bearer {{token}}
+
+### ISO4. Tenant 2's customer. EXPECT 404
+GET {{baseUrl}}/customers/{{otherCustomerId}}
+Authorization: Bearer {{token}}
+
+### ISO5. A "tenantId" inside the body is IGNORED (the DTO has no such field).
+###       EXPECT 201, and the service appears in tenant 1's list, NOT tenant 2's
+POST {{baseUrl}}/services
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "tenantId": 2, "name": "Smuggled", "durationMinutes": 10, "price": 1.00 }
+
+
+### ======================================================================
+### FOUNDER FLOW: register, create a business, become its OWNER.
+### Uses {{founderToken}} so Alice's {{token}} is untouched.
+### ======================================================================
+
+### F1. Register. EXPECT 201 (rerun gives 409)
+POST {{baseUrl}}/auth/register
+Content-Type: application/json
+
+{ "email": "founder@example.com", "password": "correct-horse-1", "fullName": "Fay Founder" }
+
+### F2. Login. EXPECT 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "founder@example.com", "password": "correct-horse-1" }
+
+> {%
+    client.global.set("founderToken", response.body.accessToken);
+%}
+
+### F3. Create a business. EXPECT 201 (rerun gives 409: slug taken). Stores its id.
+POST {{baseUrl}}/tenants
+Authorization: Bearer {{founderToken}}
+Content-Type: application/json
+
+{ "name": "Fresh Salon", "slug": "fresh-salon", "timezone": "Europe/Athens" }
+
+> {%
+    client.global.set("newTenantId", response.body.id);
+%}
+
+### F4. Memberships. EXPECT 200, the new business with role OWNER
+GET {{baseUrl}}/auth/memberships
+Authorization: Bearer {{founderToken}}
+
+### F5. Select the new business. EXPECT 200, role OWNER
+POST {{baseUrl}}/auth/select-tenant/{{newTenantId}}
+Authorization: Bearer {{founderToken}}
+
+> {%
+    client.global.set("founderToken", response.body.accessToken);
+%}
+
+### F6. Current business. EXPECT 200 "Fresh Salon"
+GET {{baseUrl}}/tenants/current
+Authorization: Bearer {{founderToken}}
+
+### F7. A brand-new business has no data. EXPECT 200, []
+GET {{baseUrl}}/services
+Authorization: Bearer {{founderToken}}
+
+### F8. Create a service in the new business. EXPECT 201
+POST {{baseUrl}}/services
+Authorization: Bearer {{founderToken}}
+Content-Type: application/json
+
+{ "name": "Blow dry", "durationMinutes": 40, "price": 20.00 }
+
+### F9. Duplicate slug. EXPECT 409
+POST {{baseUrl}}/tenants
+Authorization: Bearer {{founderToken}}
+Content-Type: application/json
+
+{ "name": "Copy", "slug": "fresh-salon", "timezone": "UTC" }
+
+### F10. Unknown time zone. EXPECT 400 "Unknown time zone"
+POST {{baseUrl}}/tenants
+Authorization: Bearer {{founderToken}}
+Content-Type: application/json
+
+{ "name": "Mars Barber", "slug": "mars-barber", "timezone": "Mars/Base" }
+
+### F11. Bad slug. EXPECT 400, errors.slug
+POST {{baseUrl}}/tenants
+Authorization: Bearer {{founderToken}}
+Content-Type: application/json
+
+{ "name": "Bad Slug", "slug": "Test Barber", "timezone": "UTC" }
+
+
+### ======================================================================
+### BOB FLOW: one person, two businesses (STAFF in tenant 1 AND tenant 2).
+### Uses {{bobToken}}.
+### ======================================================================
+
+### B1. Login as Bob. EXPECT 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "bob@test.com", "password": "correct-horse-1" }
+
+> {%
+    client.global.set("bobUserToken", response.body.accessToken);
+    client.global.set("bobToken", response.body.accessToken);
+%}
+
+### B2. Memberships. EXPECT 200, TWO entries (tenant 1 STAFF, tenant 2 STAFF)
+GET {{baseUrl}}/auth/memberships
+Authorization: Bearer {{bobUserToken}}
+
+### B3. Select tenant 2 (Second Gym). EXPECT 200, role STAFF
+POST {{baseUrl}}/auth/select-tenant/2
+Authorization: Bearer {{bobUserToken}}
+
+> {%
+    client.global.set("bobToken", response.body.accessToken);
+%}
+
+### B4. Services. EXPECT 200, ONLY "Yoga Class" (tenant 2's)
+GET {{baseUrl}}/services
+Authorization: Bearer {{bobToken}}
+
+### B5. Tenant 1's service by id. EXPECT 404
+GET {{baseUrl}}/services/1
+Authorization: Bearer {{bobToken}}
+
+### B6. Customers. EXPECT 200, ONLY "Zoe Gym"
+GET {{baseUrl}}/customers
+Authorization: Bearer {{bobToken}}
+
+### B7. Tenant 1's appointment 1 (run A1 first). EXPECT 404
+GET {{baseUrl}}/appointments/1
+Authorization: Bearer {{bobToken}}
+
+### B8. Switch to tenant 1. EXPECT 200, role STAFF
+POST {{baseUrl}}/auth/select-tenant/1
+Authorization: Bearer {{bobUserToken}}
+
+> {%
+    client.global.set("bobToken", response.body.accessToken);
+%}
+
+### B9. Services again. EXPECT 200, tenant 1's services (Haircut, Beard Trim...)
+GET {{baseUrl}}/services
+Authorization: Bearer {{bobToken}}

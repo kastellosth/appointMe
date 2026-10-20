@@ -2,20 +2,19 @@ package com.kastellosth.appointme.controller;
 
 import com.kastellosth.appointme.dto.LoginRequest;
 import com.kastellosth.appointme.dto.LoginResponse;
+import com.kastellosth.appointme.dto.MembershipResponse;
 import com.kastellosth.appointme.dto.RegisterRequest;
+import com.kastellosth.appointme.dto.TenantTokenResponse;
 import com.kastellosth.appointme.dto.UserResponse;
-import com.kastellosth.appointme.servicie.AuthService;
+import com.kastellosth.appointme.security.CurrentUser;
+import com.kastellosth.appointme.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/auth")
@@ -23,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final CurrentUser currentUser;
 
     @PostMapping("/register")
     public ResponseEntity<UserResponse> register(@Valid @RequestBody RegisterRequest req) {
@@ -35,7 +35,17 @@ public class AuthController {
     }
 
     @GetMapping("/me")
-    public UserResponse me(@AuthenticationPrincipal Jwt jwt) {
-        return authService.currentUser(Long.valueOf(jwt.getSubject()));
+    public UserResponse me() {
+        return authService.currentUser(currentUser.userId());
+    }
+
+    @GetMapping("/memberships")
+    public List<MembershipResponse> memberships() {
+        return authService.myMemberships(currentUser.userId());
+    }
+
+    @PostMapping("/select-tenant/{tenantId}")
+    public TenantTokenResponse selectTenant(@PathVariable Long tenantId) {
+        return authService.selectTenant(currentUser.userId(), tenantId);
     }
 }

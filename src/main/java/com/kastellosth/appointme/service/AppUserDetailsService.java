@@ -1,4 +1,4 @@
-package com.kastellosth.appointme.servicie;
+package com.kastellosth.appointme.service;
 
 import com.kastellosth.appointme.entity.User;
 import com.kastellosth.appointme.repository.UserRepository;
