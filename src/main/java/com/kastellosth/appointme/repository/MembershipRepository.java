@@ -15,4 +15,8 @@ public interface MembershipRepository extends JpaRepository<Membership, Long> {
 
     @EntityGraph(attributePaths = "tenant")
     List<Membership> findByUserId(Long userId);
+    boolean existsByUserIdAndTenantId(Long userId, Long tenantId);
+
+    @EntityGraph(attributePaths = "user")
+    List<Membership> findByTenantIdOrderByCreatedAtAsc(Long tenantId);
 }

@@ -5,6 +5,7 @@ import com.kastellosth.appointme.dto.AppointmentResponse;
 import com.kastellosth.appointme.entity.*;
 import com.kastellosth.appointme.exception.BadRequestException;
 import com.kastellosth.appointme.exception.ConflictException;
+import com.kastellosth.appointme.exception.ForbiddenException;
 import com.kastellosth.appointme.exception.NotFoundException;
 import com.kastellosth.appointme.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -28,7 +29,10 @@ public class AppointmentService {
     private final ServiceOfferingRepository services;
 
     @Transactional
-    public AppointmentResponse create(Long tenantId, AppointmentRequest req) {
+    public AppointmentResponse create(Long tenantId, Long staffScope, AppointmentRequest req) {
+        if (staffScope != null && !staffScope.equals(req.staffId())) {
+            throw new ForbiddenException("Staff members can only book appointments on their own schedule");
+        }
         Tenant tenant = tenants.findById(tenantId)
                 .orElseThrow(() -> new NotFoundException("Tenant " + tenantId + " not found"));
 
@@ -57,25 +61,27 @@ public class AppointmentService {
     }
 
     @Transactional(readOnly = true)
-    public List<AppointmentResponse> list(Long tenantId, Instant from, Instant to) {
+    public List<AppointmentResponse> list(Long tenantId, Long staffScope, Instant from, Instant to) {
         if (!from.isBefore(to)) {
             throw new BadRequestException("'from' must be before 'to'");
         }
         if (Duration.between(from, to).compareTo(MAX_RANGE) > 0) {
             throw new BadRequestException("Date range cannot exceed 62 days");
         }
-        return appointments.findInRange(tenantId, from, to).stream()
-                .map(this::toResponse).toList();
+        List<Appointment> found = (staffScope == null)
+                ? appointments.findInRange(tenantId, from, to)
+                : appointments.findInRangeForStaff(tenantId, staffScope, from, to);
+        return found.stream().map(this::toResponse).toList();
     }
 
     @Transactional(readOnly = true)
-    public AppointmentResponse get(Long tenantId, Long id) {
-        return toResponse(find(tenantId, id));
+    public AppointmentResponse get(Long tenantId, Long staffScope, Long id) {
+        return toResponse(find(tenantId, staffScope, id));
     }
-
     @Transactional
-    public AppointmentResponse updateStatus(Long tenantId, Long id, AppointmentStatus target) {
-        Appointment a = find(tenantId, id);
+    public AppointmentResponse updateStatus(Long tenantId, Long staffScope, Long id,
+                                            AppointmentStatus target) {
+        Appointment a = find(tenantId, staffScope, id);
         if (!a.getStatus().canTransitionTo(target)) {
             throw new ConflictException(
                     "Cannot change status from " + a.getStatus() + " to " + target);
@@ -84,9 +90,13 @@ public class AppointmentService {
         return toResponse(a);
     }
 
-    private Appointment find(Long tenantId, Long id) {
-        return appointments.findByIdAndTenantId(id, tenantId)
+    private Appointment find(Long tenantId, Long staffScope, Long id) {
+        Appointment a = appointments.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new NotFoundException("Appointment " + id + " not found"));
+        if (staffScope != null && !a.getStaff().getId().equals(staffScope)) {
+            throw new NotFoundException("Appointment " + id + " not found");
+        }
+        return a;
     }
 
     private AppointmentResponse toResponse(Appointment a) {

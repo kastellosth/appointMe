@@ -33,6 +33,13 @@ public class CurrentUser {
         return MembershipRole.valueOf(role);
     }
 
+    public Long membershipId() {
+        Number id = jwt().getClaim("membership_id");
+        if (id == null) {
+            throw new ForbiddenException("No business selected");
+        }
+        return id.longValue();
+    }
     private Jwt jwt() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth instanceof JwtAuthenticationToken token) {

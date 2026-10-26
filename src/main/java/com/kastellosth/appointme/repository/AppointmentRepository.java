@@ -26,4 +26,20 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     List<Appointment> findInRange(@Param("tenantId") Long tenantId,
                                   @Param("from") Instant from,
                                   @Param("to") Instant to);
+
+    @EntityGraph(attributePaths = {"staff.user", "customer", "service"})
+    @Query("""
+        select a from Appointment a
+        where a.tenant.id = :tenantId
+          and a.staff.id = :staffId
+          and a.startsAt >= :from
+          and a.startsAt < :to
+        order by a.startsAt
+        """)
+    List<Appointment> findInRangeForStaff(@Param("tenantId") Long tenantId,
+                                          @Param("staffId") Long staffId,
+                                          @Param("from") Instant from,
+                                          @Param("to") Instant to);
+
 }
+
