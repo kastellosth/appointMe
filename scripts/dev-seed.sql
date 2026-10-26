@@ -25,20 +25,23 @@ INSERT INTO customers (tenant_id, full_name, email, phone) VALUES
                                                                (1, 'Ben Jones', 'ben@example.com', '6900000002'),   -- customer 2
                                                                (2, 'Zoe Gym',   'zoe@example.com', '6900000003');   -- customer 3
 
--- Users: id 1 = Alice, id 2 = Bob. Both log in with the password:  correct-horse-1
+-- Users: id 1 = Alice, id 2 = Bob, id 3 = Gus. All log in with the password:  correct-horse-1
 -- (dev-only BCrypt hash of that test password; never use real passwords here)
 INSERT INTO users (email, password_hash, full_name) VALUES
                                                         ('alice@test.com', '$2a$10$ltP1XKnRglbwTbLn5wTa5eOfLhdQYlDInljmUGRJ3T8MDJU9Lpj6G', 'Alice Owner'),
-                                                        ('bob@test.com',   '$2a$10$ltP1XKnRglbwTbLn5wTa5eOfLhdQYlDInljmUGRJ3T8MDJU9Lpj6G', 'Bob Barber');
+                                                        ('bob@test.com',   '$2a$10$ltP1XKnRglbwTbLn5wTa5eOfLhdQYlDInljmUGRJ3T8MDJU9Lpj6G', 'Bob Barber'),
+                                                        ('gus@test.com',   '$2a$10$ltP1XKnRglbwTbLn5wTa5eOfLhdQYlDInljmUGRJ3T8MDJU9Lpj6G', 'Gus Gym-Owner');
 
 -- Memberships (these ids are the "staffId" used when booking):
 --   membership 1 = Alice, OWNER in tenant 1
 --   membership 2 = Bob,   STAFF in tenant 1
 --   membership 3 = Bob,   STAFF in tenant 2   (for cross-tenant attack tests)
+--   membership 4 = Gus,   OWNER in tenant 2   (the victim business in Day 14 attacks)
 INSERT INTO memberships (user_id, tenant_id, role) VALUES
                                                        (1, 1, 'OWNER'),
                                                        (2, 1, 'STAFF'),
-                                                       (2, 2, 'STAFF');
+                                                       (2, 2, 'STAFF'),
+                                                       (3, 2, 'OWNER');
 
 -- Show what you got
 SELECT 'tenants' AS tbl, id, name AS label FROM tenants

@@ -1,0 +1,270 @@
+### =====================================================================
+### appointMe - day14-attacks.http   (Day 14: attack your own system)
+###
+### Cast (all password: correct-horse-1; load the NEW scripts/dev-seed.sql first):
+###   ALICE = OWNER of tenant 1 "Test Barber"   <- the ATTACKER
+###   GUS   = OWNER of tenant 2 "Second Gym"    <- the VICTIM
+###
+### Victim data that Alice must never reach:
+###   service 3 "Yoga Class", customer 3 "Zoe Gym", membership 3 (Bob @ tenant 2),
+###   membership 4 (Gus), and the appointment Gus books in V1 below.
+###
+### An attack PASSES only if ALL THREE are true:
+###   1) the status code is the expected one,
+###   2) the response contains NO data from the other tenant,
+###   3) nothing changed in the database (check with the SQL in the lesson).
+### Write the real result of every attack in security-attacks.md.
+### Tokens last 30 minutes. Sudden 401s => rerun SETUP.
+### =====================================================================
+
+@baseUrl = http://localhost:8080
+
+### Victim ids (tenant 2) - Alice does not belong there
+@victimServiceId = 3
+@victimCustomerId = 3
+@victimStaffId = 3
+
+### Alice's own ids (tenant 1)
+@ownServiceId = 1
+@ownCustomerId = 1
+@ownStaffId = 2
+
+
+### ======================================================================
+### SETUP
+### ======================================================================
+
+### A1. Alice logs in. EXPECT 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "alice@test.com", "password": "correct-horse-1" }
+
+> {%
+    client.global.set("aliceUserToken", response.body.accessToken);
+%}
+
+### A2. Alice selects tenant 1. EXPECT 200, OWNER
+POST {{baseUrl}}/auth/select-tenant/1
+Authorization: Bearer {{aliceUserToken}}
+
+> {%
+    client.global.set("aliceToken", response.body.accessToken);
+%}
+
+### G1. Gus logs in. EXPECT 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "gus@test.com", "password": "correct-horse-1" }
+
+> {%
+    client.global.set("gusUserToken", response.body.accessToken);
+%}
+
+### G2. Gus selects tenant 2. EXPECT 200, OWNER
+POST {{baseUrl}}/auth/select-tenant/2
+Authorization: Bearer {{gusUserToken}}
+
+> {%
+    client.global.set("gusToken", response.body.accessToken);
+%}
+
+### V1. Gus books an appointment in tenant 2 (the victim record). EXPECT 201
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{gusToken}}
+Content-Type: application/json
+
+{ "staffId": {{victimStaffId}}, "customerId": {{victimCustomerId}}, "serviceId": {{victimServiceId}},
+  "startsAt": "2026-11-24T09:00:00Z", "notes": "GUS SECRET NOTE" }
+
+> {%
+    client.global.set("victimApptId", response.body.id);
+%}
+
+### V2. Alice books her own appointment (the baseline). EXPECT 201
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": {{ownStaffId}}, "customerId": {{ownCustomerId}}, "serviceId": {{ownServiceId}},
+  "startsAt": "2026-11-24T10:00:00Z", "notes": "alice note" }
+
+
+### ======================================================================
+### GROUP 1 - READ another tenant's record by id   (all EXPECT 404)
+### ======================================================================
+
+### ATK-01. Victim's service. EXPECT 404
+GET {{baseUrl}}/services/{{victimServiceId}}
+Authorization: Bearer {{aliceToken}}
+
+### ATK-02. Victim's customer. EXPECT 404
+GET {{baseUrl}}/customers/{{victimCustomerId}}
+Authorization: Bearer {{aliceToken}}
+
+### ATK-03. Victim's appointment. EXPECT 404 (no "GUS SECRET NOTE" anywhere)
+GET {{baseUrl}}/appointments/{{victimApptId}}
+Authorization: Bearer {{aliceToken}}
+
+### ATK-04. BASELINE: an id that exists NOWHERE. EXPECT 404.
+###        Compare with ATK-01: the two bodies must look the same except for the id
+###        in the text. If an attacker can tell them apart, ids can be enumerated.
+GET {{baseUrl}}/services/99999
+Authorization: Bearer {{aliceToken}}
+
+
+### ======================================================================
+### GROUP 2 - WRITE to another tenant's record   (all EXPECT 404, data unchanged)
+### ======================================================================
+
+### ATK-05. Update the victim's service. EXPECT 404
+PUT {{baseUrl}}/services/{{victimServiceId}}
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "name": "HACKED", "durationMinutes": 1, "price": 0.00, "active": false }
+
+### ATK-06. Delete (deactivate) the victim's service. EXPECT 404
+DELETE {{baseUrl}}/services/{{victimServiceId}}
+Authorization: Bearer {{aliceToken}}
+
+### ATK-07. Update the victim's customer. EXPECT 404
+PUT {{baseUrl}}/customers/{{victimCustomerId}}
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "fullName": "HACKED", "email": "hacked@example.com" }
+
+### ATK-08. Delete the victim's customer. EXPECT 404
+DELETE {{baseUrl}}/customers/{{victimCustomerId}}
+Authorization: Bearer {{aliceToken}}
+
+### ATK-09. Change the status of the victim's appointment. EXPECT 404
+PATCH {{baseUrl}}/appointments/{{victimApptId}}/status
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "status": "CANCELLED" }
+
+
+### ======================================================================
+### GROUP 3 - CROSS-TENANT REFERENCES when creating an appointment
+### Alice is allowed to book, but tries to attach the VICTIM's data to her booking.
+### (all EXPECT 404)
+### ======================================================================
+
+### ATK-10. Foreign customer. EXPECT 404
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": {{ownStaffId}}, "customerId": {{victimCustomerId}}, "serviceId": {{ownServiceId}},
+  "startsAt": "2026-11-25T09:00:00Z" }
+
+### ATK-11. Foreign service. EXPECT 404
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": {{ownStaffId}}, "customerId": {{ownCustomerId}}, "serviceId": {{victimServiceId}},
+  "startsAt": "2026-11-25T09:00:00Z" }
+
+### ATK-12. Foreign staff member (Bob's membership in tenant 2). EXPECT 404
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": {{victimStaffId}}, "customerId": {{ownCustomerId}}, "serviceId": {{ownServiceId}},
+  "startsAt": "2026-11-25T09:00:00Z" }
+
+### ATK-13. All three foreign at once. EXPECT 404
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": {{victimStaffId}}, "customerId": {{victimCustomerId}}, "serviceId": {{victimServiceId}},
+  "startsAt": "2026-11-25T09:00:00Z" }
+
+
+### ======================================================================
+### GROUP 4 - LISTS must never include another tenant's rows
+### ======================================================================
+
+### ATK-14. Services. EXPECT 200, NO "Yoga Class"
+GET {{baseUrl}}/services
+Authorization: Bearer {{aliceToken}}
+
+### ATK-15. Search for the victim's customer by name. EXPECT 200, totalElements 0
+GET {{baseUrl}}/customers?name=zoe
+Authorization: Bearer {{aliceToken}}
+
+### ATK-16. Customers, biggest page allowed. EXPECT 200, NO "Zoe Gym"
+GET {{baseUrl}}/customers?size=100
+Authorization: Bearer {{aliceToken}}
+
+### ATK-17. Appointments for the whole month. EXPECT 200, ONLY Alice's, NO "GUS SECRET NOTE"
+GET {{baseUrl}}/appointments?from=2026-11-01T00:00:00Z&to=2026-12-01T00:00:00Z
+Authorization: Bearer {{aliceToken}}
+
+### ATK-18. Team list. EXPECT 200, Alice and Bob (tenant 1) only, NOT Gus
+GET {{baseUrl}}/staff
+Authorization: Bearer {{aliceToken}}
+
+
+### ======================================================================
+### GROUP 5 - SPOOFING the tenant: every place a client could "say" it
+### ======================================================================
+
+### ATK-19. Tenant in the query string. EXPECT 200, STILL tenant 1's services
+GET {{baseUrl}}/services?tenantId=2
+Authorization: Bearer {{aliceToken}}
+
+### ATK-20. Tenant in a header. EXPECT 200, STILL tenant 1's services
+GET {{baseUrl}}/services
+Authorization: Bearer {{aliceToken}}
+X-Tenant-Id: 2
+
+### ATK-21. Tenant in the JSON body of a create. EXPECT 201 (or 400 if unknown fields are
+###        rejected). Either way the row lands in tenant 1. Check with the SQL in the lesson.
+POST {{baseUrl}}/services
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "tenantId": 2, "tenant": { "id": 2 }, "name": "Spoofed service", "durationMinutes": 10, "price": 1.00 }
+
+### ATK-22. Select a business Alice does not belong to. EXPECT 404
+POST {{baseUrl}}/auth/select-tenant/2
+Authorization: Bearer {{aliceUserToken}}
+
+
+### ======================================================================
+### GROUP 6 - TOKEN attacks
+### Forge with the helper (needs a token printed by A2 / the console):
+###   powershell -ExecutionPolicy Bypass -File .\scripts\forge-token.ps1 -Token "<aliceToken>" -Claim tenant_id -Value 2
+###   powershell -ExecutionPolicy Bypass -File .\scripts\forge-token.ps1 -Token "<aliceToken>" -Claim role -Value OWNER
+### Paste the LAST line it prints in place of the placeholder below.
+### ======================================================================
+
+### ATK-23. Alice's token with tenant_id changed to 2. EXPECT 401
+GET {{baseUrl}}/services
+Authorization: Bearer PASTE.FORGED.TENANT.TOKEN
+
+### ATK-24. Same idea on Bob's STAFF token with role changed to OWNER. EXPECT 401
+###        (log Bob in first, or use any tenant token and change a claim)
+POST {{baseUrl}}/services
+Authorization: Bearer PASTE.FORGED.ROLE.TOKEN
+Content-Type: application/json
+
+{ "name": "Forged owner", "durationMinutes": 10, "price": 1.00 }
+
+### ATK-25. Unsigned token ("alg":"none") claiming to be tenant 2's owner. EXPECT 401
+GET {{baseUrl}}/services
+Authorization: Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiIzIiwidGVuYW50X2lkIjoyLCJyb2xlIjoiT1dORVIifQ.
+
+### ATK-26. A valid USER token (no business selected) on a business endpoint. EXPECT 403
+GET {{baseUrl}}/services
+Authorization: Bearer {{aliceUserToken}}
+
+### ATK-27. No token at all. EXPECT 401
+GET {{baseUrl}}/services
