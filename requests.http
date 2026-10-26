@@ -1,27 +1,20 @@
 ### =====================================================================
-### appointMe - day16-availability.http   (Day 16: free slots and time zones)
+### appointMe - day17-double-booking.http   (Day 17: the database says NO)
 ### SELF-CONTAINED: it logs in by itself and keeps its own tokens.
 ###
 ### BEFORE YOU START (and before every re-run of this file)
-###   1. Reload the seed so the data is known:
+###   1. V4__no_overlapping_appointments.sql must be applied (start the app once).
+###   2. Reload the seed:
 ###        Get-Content .\scripts\dev-seed.sql | docker exec -i appointme-db psql -U appointme -d appointme
-###   2. Run SETUP top to bottom, then the rest in order.
+###      (The seed restores Bob's normal week: Mon-Fri 09:00-13:00 and 14:00-18:00.)
 ###
-### Cast (password for all: correct-horse-1)
-###   ALICE = OWNER  of tenant 1 (membership 1)  seed hours: Mon-Fri 09:00-17:00
-###   BOB   = STAFF  in tenant 1 (membership 2)  we REPLACE his hours in S1 (below)
-###   GUS   = OWNER  of tenant 2 (membership 4, service 3)  <- foreign to Alice
-### Tenant 1 time zone: Europe/Athens (UTC+2 in winter, UTC+3 in summer).
-### Services: 1 = Haircut (30 min), 2 = Beard Trim (15 min)
+### All bookings are on Tuesday 2027-02-02, Haircut = 30 minutes, customer 1.
+### Times below are UTC (Z). Tenant 1 is Europe/Athens = UTC+2 in February,
+### so 10:00Z is 12:00 on the clock in Athens.
 ###
-### Bob's schedule used here (set by S1):
-###   MONDAY    09:00-13:00 and 14:00-18:00   (lunch break)
-###   TUESDAY   09:00-09:20                   (a deliberately tiny window)
-###   SUNDAY    00:00-08:00                   (for the daylight-saving tests)
-###
-### Each request has built-in checks. IntelliJ shows PASSED / FAILED for them in the
-### response panel, next to the "EXPECT" line written here.
-### The slot times come back with the TENANT's offset, e.g. 2026-11-16T09:00:00+02:00.
+### IMPORTANT: today a clash is NOT yet a clean 409. The API will answer with an ERROR status
+### (probably 500) because nothing translates the database error yet. That is exactly what
+### Day 18 fixes. What matters today: the clash is NEVER a 201, and nothing is stored.
 ### =====================================================================
 
 @baseUrl = http://localhost:8080
@@ -49,330 +42,133 @@ Authorization: Bearer {{aliceUserToken}}
     client.global.set("aliceToken", response.body.accessToken);
 %}
 
-### W1. Bob logs in. EXPECT 200
-POST {{baseUrl}}/auth/login
-Content-Type: application/json
-
-{ "email": "bob@test.com", "password": "correct-horse-1" }
-
-> {%
-    client.global.set("bobUserToken", response.body.accessToken);
-%}
-
-### W2. Bob selects tenant 1. EXPECT 200, STAFF
-POST {{baseUrl}}/auth/select-tenant/1
-Authorization: Bearer {{bobUserToken}}
-
-> {%
-    client.global.set("bobToken", response.body.accessToken);
-%}
-
-### S1. Alice sets Bob's test schedule (Day 15 endpoint). EXPECT 200, 4 intervals
-PUT {{baseUrl}}/staff/2/working-hours
-Authorization: Bearer {{aliceToken}}
-Content-Type: application/json
-
-{
-  "intervals": [
-    { "dayOfWeek": "MONDAY",  "start": "09:00", "end": "13:00" },
-    { "dayOfWeek": "MONDAY",  "start": "14:00", "end": "18:00" },
-    { "dayOfWeek": "TUESDAY", "start": "09:00", "end": "09:20" },
-    { "dayOfWeek": "SUNDAY",  "start": "00:00", "end": "08:00" }
-  ]
-}
-
-> {%
-    client.test("S1: 4 intervals saved", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        client.assert(response.body.intervals.length === 4, "intervals " + response.body.intervals.length);
-    });
-%}
-
 
 ### ======================================================================
-### A. THE BASICS: Monday 2026-11-16, Bob, Haircut (30 min), default step (15)
+### 1. THE CONSTRAINT THROUGH YOUR API
 ### ======================================================================
 
-### A1. No appointments yet. EXPECT 200, 30 slots:
-###     09:00 ... 12:30 (15 slots), nothing from 13:00 to 14:00 (lunch), 14:00 ... 17:30 (15 slots)
-###     Header fields: timezone Europe/Athens, durationMinutes 30, stepMinutes 15
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-16
-Authorization: Bearer {{aliceToken}}
-
-> {%
-    client.test("A1: 30 slots, lunch gap, tenant zone", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        var s = response.body.slots;
-        client.assert(s.length === 30, "slot count " + s.length);
-        client.assert(s[0].startsAt === "2026-11-16T09:00:00+02:00", "first " + s[0].startsAt);
-        client.assert(s[14].startsAt === "2026-11-16T12:30:00+02:00", "last morning " + s[14].startsAt);
-        client.assert(s[15].startsAt === "2026-11-16T14:00:00+02:00", "first afternoon " + s[15].startsAt);
-        client.assert(s[29].startsAt === "2026-11-16T17:30:00+02:00", "last " + s[29].startsAt);
-        client.assert(s[0].endsAt === "2026-11-16T09:30:00+02:00", "first slot end " + s[0].endsAt);
-        client.assert(response.body.timezone === "Europe/Athens", "timezone " + response.body.timezone);
-        client.assert(response.body.durationMinutes === 30, "duration");
-        client.assert(response.body.stepMinutes === 15, "step");
-    });
-%}
-
-### A2. The owner books Bob at 10:00 Athens time (= 08:00 UTC), 30 min. EXPECT 201
+### C1. Book Bob 10:00Z-10:30Z. EXPECT 201 (remember its id)
 POST {{baseUrl}}/appointments
 Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
 
-{ "staffId": 2, "customerId": 1, "serviceId": 1,
-  "startsAt": "2026-11-16T08:00:00Z", "notes": "day16 availability test" }
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:00:00Z", "notes": "first" }
 
 > {%
-    client.global.set("apptId", response.body.id);
-    client.test("A2: booked", function () {
+    client.global.set("firstApptId", response.body.id);
+    client.test("C1: booked", function () {
         client.assert(response.status === 201, "status " + response.status);
     });
 %}
 
-### A3. Same query again. EXPECT 27 slots. 09:30 is KEPT (it ends exactly when the booking starts),
-###     09:45, 10:00 and 10:15 are GONE (they overlap 10:00-10:30), 10:30 is KEPT (starts when it ends)
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-16
+### C2. EXACTLY the same slot again. EXPECT an ERROR status (NOT 201).
+###     Today probably 500; after Day 18 it will be 409.
+POST {{baseUrl}}/appointments
 Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:00:00Z", "notes": "duplicate" }
 
 > {%
-    client.test("A3: three slots removed around the booking", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        var starts = response.body.slots.map(function (x) { return x.startsAt; });
-        client.assert(starts.length === 27, "slot count " + starts.length);
-        client.assert(starts.indexOf("2026-11-16T09:30:00+02:00") >= 0, "09:30 should be kept");
-        client.assert(starts.indexOf("2026-11-16T09:45:00+02:00") < 0, "09:45 should be gone");
-        client.assert(starts.indexOf("2026-11-16T10:00:00+02:00") < 0, "10:00 should be gone");
-        client.assert(starts.indexOf("2026-11-16T10:15:00+02:00") < 0, "10:15 should be gone");
-        client.assert(starts.indexOf("2026-11-16T10:30:00+02:00") >= 0, "10:30 should be kept");
+    client.test("C2: duplicate refused (not 201)", function () {
+        client.assert(response.status !== 201, "the duplicate was ACCEPTED, status " + response.status);
     });
 %}
 
-### A4. Cancel that appointment. EXPECT 200, CANCELLED
-PATCH {{baseUrl}}/appointments/{{apptId}}/status
+### C3. Partial overlap, 10:15Z-10:45Z. EXPECT an ERROR status (NOT 201)
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:15:00Z", "notes": "overlap" }
+
+> {%
+    client.test("C3: overlap refused (not 201)", function () {
+        client.assert(response.status !== 201, "the overlap was ACCEPTED, status " + response.status);
+    });
+%}
+
+### C4. Back-to-back, 10:30Z-11:00Z. EXPECT 201 (the end of one is the start of the next)
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:30:00Z", "notes": "back to back" }
+
+> {%
+    client.test("C4: back-to-back allowed", function () {
+        client.assert(response.status === 201, "status " + response.status);
+    });
+%}
+
+### C5. A DIFFERENT staff member (Alice herself, membership 1) at the same time. EXPECT 201
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 1, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:00:00Z", "notes": "other staff" }
+
+> {%
+    client.test("C5: different staff allowed", function () {
+        client.assert(response.status === 201, "status " + response.status);
+    });
+%}
+
+
+### ======================================================================
+### 2. CANCELLING FREES THE SLOT
+### ======================================================================
+
+### C6. Cancel the first appointment. EXPECT 200, CANCELLED
+PATCH {{baseUrl}}/appointments/{{firstApptId}}/status
 Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
 
 { "status": "CANCELLED" }
 
-### A5. Cancelled bookings free their time. EXPECT 30 slots again
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-16
+### C7. Book Bob 10:00Z again (the slot C1 had). EXPECT 201
+POST {{baseUrl}}/appointments
 Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:00:00Z", "notes": "re-booked" }
 
 > {%
-    client.test("A5: back to 30 slots", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        client.assert(response.body.slots.length === 30, "slot count " + response.body.slots.length);
-    });
-%}
-
-### A6. A different staff member: Alice, Mon 09:00-17:00 (seed). EXPECT 31 slots (09:00 ... 16:30)
-GET {{baseUrl}}/availability?staffId=1&serviceId=1&date=2026-11-16
-Authorization: Bearer {{aliceToken}}
-
-> {%
-    client.test("A6: Alice has 31 slots", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        client.assert(response.body.slots.length === 31, "slot count " + response.body.slots.length);
+    client.test("C7: slot reused after cancel", function () {
+        client.assert(response.status === 201, "status " + response.status);
     });
 %}
 
 
 ### ======================================================================
-### B. EDGE CASES
+### 3. AVAILABILITY (Day 16) AND THE CONSTRAINT AGREE
+### Bob is now busy 10:00Z-11:00Z = 12:00-13:00 Athens time (C7 + C4).
 ### ======================================================================
 
-### B1. Tuesday 2026-11-17: Bob works only 09:00-09:20. A 30-minute Haircut cannot fit.
-###     EXPECT 200 and "slots": []   (an empty list, NOT an error)
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-17
+### C8. Bob's free slots, Tuesday 2027-02-02, Haircut. EXPECT 200 and 26 slots
+###     (30 without bookings). Morning slots 11:45, 12:00, 12:15 and 12:30 are gone;
+###     11:30 and the afternoon 14:00 ... 17:30 are still there.
+GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2027-02-02
 Authorization: Bearer {{aliceToken}}
 
 > {%
-    client.test("B1: nothing fits", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        client.assert(response.body.slots.length === 0, "slot count " + response.body.slots.length);
-    });
-%}
-
-### B2. Same day, Beard Trim (15 min), step 15. EXPECT exactly 1 slot: 09:00
-###     (09:15 + 15 min would end at 09:30, past the 09:20 end of the window)
-GET {{baseUrl}}/availability?staffId=2&serviceId=2&date=2026-11-17
-Authorization: Bearer {{aliceToken}}
-
-> {%
-    client.test("B2: one slot at 09:00", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        var s = response.body.slots;
-        client.assert(s.length === 1, "slot count " + s.length);
-        client.assert(s[0].startsAt === "2026-11-17T09:00:00+02:00", "start " + s[0].startsAt);
-    });
-%}
-
-### B3. Same, but a finer step. EXPECT 2 slots: 09:00 and 09:05
-GET {{baseUrl}}/availability?staffId=2&serviceId=2&date=2026-11-17&stepMinutes=5
-Authorization: Bearer {{aliceToken}}
-
-> {%
-    client.test("B3: 09:00 and 09:05", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        var s = response.body.slots;
-        client.assert(s.length === 2, "slot count " + s.length);
-        client.assert(s[1].startsAt === "2026-11-17T09:05:00+02:00", "second " + s[1].startsAt);
-        client.assert(response.body.stepMinutes === 5, "step");
-    });
-%}
-
-### B4. Wednesday 2026-11-18: Bob has no hours. EXPECT 200, "slots": []
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-18
-Authorization: Bearer {{aliceToken}}
-
-> {%
-    client.test("B4: day off", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        client.assert(response.body.slots.length === 0, "slot count " + response.body.slots.length);
-    });
-%}
-
-### B5. A date in the past (a Monday, so he "works"): slots that already started are dropped.
-###     EXPECT 200, "slots": []
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2020-01-06
-Authorization: Bearer {{aliceToken}}
-
-> {%
-    client.test("B5: past slots dropped", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        client.assert(response.body.slots.length === 0, "slot count " + response.body.slots.length);
-    });
-%}
-
-### B6. Unknown service. EXPECT 404
-GET {{baseUrl}}/availability?staffId=2&serviceId=9999&date=2026-11-16
-Authorization: Bearer {{aliceToken}}
-
-### B7. Unknown staff member. EXPECT 404
-GET {{baseUrl}}/availability?staffId=9999&serviceId=1&date=2026-11-16
-Authorization: Bearer {{aliceToken}}
-
-
-### ======================================================================
-### C. BAD INPUT   (all EXPECT 400)
-### ======================================================================
-
-### C1. date missing. EXPECT 400
-GET {{baseUrl}}/availability?staffId=2&serviceId=1
-Authorization: Bearer {{aliceToken}}
-
-### C2. date not a date. EXPECT 400
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=banana
-Authorization: Bearer {{aliceToken}}
-
-### C3. date in the wrong format (day-month-year). EXPECT 400
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=16-11-2026
-Authorization: Bearer {{aliceToken}}
-
-### C4. stepMinutes too small (minimum is 5). EXPECT 400
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-16&stepMinutes=1
-Authorization: Bearer {{aliceToken}}
-
-### C5. stepMinutes too large (maximum is 240). EXPECT 400
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-16&stepMinutes=500
-Authorization: Bearer {{aliceToken}}
-
-### C6. staffId missing. EXPECT 400
-GET {{baseUrl}}/availability?serviceId=1&date=2026-11-16
-Authorization: Bearer {{aliceToken}}
-
-### C7. staffId not a number. EXPECT 400
-GET {{baseUrl}}/availability?staffId=abc&serviceId=1&date=2026-11-16
-Authorization: Bearer {{aliceToken}}
-
-
-### ======================================================================
-### D. DAYLIGHT SAVING TIME   (Sunday 00:00-08:00, Haircut 30 min, step 60)
-### A normal Sunday has 8 slots. Watch what the clock labels do on the two special days.
-### (Europe/Athens switched back on Sunday 2026-10-25, the day before you got these
-### requests, so we test next year's changes, which are in the future.)
-### ======================================================================
-
-### D1. A NORMAL Sunday, 2026-11-15. EXPECT 8 slots: 00:00 01:00 ... 07:00, all +02:00
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-15&stepMinutes=60
-Authorization: Bearer {{aliceToken}}
-
-> {%
-    client.test("D1: normal Sunday, 8 slots", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        client.assert(response.body.slots.length === 8, "slot count " + response.body.slots.length);
-    });
-%}
-
-### D2. SPRING FORWARD, Sunday 2027-03-28: at 03:00 the clocks jump to 04:00, so the day has only
-###     23 hours and the 00:00-08:00 window is 7 REAL hours.
-###     EXPECT 7 slots: 00:00 01:00 02:00 (+02:00) then 04:00 05:00 06:00 07:00 (+03:00).
-###     There is NO 03:00 slot: that wall-clock time does not exist that day.
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2027-03-28&stepMinutes=60
-Authorization: Bearer {{aliceToken}}
-
-> {%
-    client.test("D2: spring forward, no 03:00", function () {
+    client.test("C8: 26 slots, the booked hour is gone", function () {
         client.assert(response.status === 200, "status " + response.status);
         var starts = response.body.slots.map(function (x) { return x.startsAt; });
-        client.assert(starts.length === 7, "slot count " + starts.length);
-        client.assert(starts[2] === "2027-03-28T02:00:00+02:00", "third " + starts[2]);
-        client.assert(starts[3] === "2027-03-28T04:00:00+03:00", "fourth " + starts[3]);
-        client.assert(starts[6] === "2027-03-28T07:00:00+03:00", "last " + starts[6]);
-    });
-%}
-
-### D3. FALL BACK, Sunday 2027-10-31: at 04:00 the clocks return to 03:00, so the day has 25 hours
-###     and the window is 9 REAL hours.
-###     EXPECT 9 slots, and "03:00" appears TWICE with different offsets:
-###     ... 02:00+03:00, 03:00+03:00, 03:00+02:00, 04:00+02:00 ...
-###     The offset is what tells the two apart. This is why the API returns offsets.
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2027-10-31&stepMinutes=60
-Authorization: Bearer {{aliceToken}}
-
-> {%
-    client.test("D3: fall back, 03:00 twice", function () {
-        client.assert(response.status === 200, "status " + response.status);
-        var starts = response.body.slots.map(function (x) { return x.startsAt; });
-        client.assert(starts.length === 9, "slot count " + starts.length);
-        client.assert(starts[3] === "2027-10-31T03:00:00+03:00", "fourth " + starts[3]);
-        client.assert(starts[4] === "2027-10-31T03:00:00+02:00", "fifth " + starts[4]);
-        client.assert(starts[8] === "2027-10-31T07:00:00+02:00", "last " + starts[8]);
+        client.assert(starts.length === 26, "slot count " + starts.length);
+        client.assert(starts.indexOf("2027-02-02T11:30:00+02:00") >= 0, "11:30 should be free");
+        client.assert(starts.indexOf("2027-02-02T11:45:00+02:00") < 0, "11:45 should be gone");
+        client.assert(starts.indexOf("2027-02-02T12:30:00+02:00") < 0, "12:30 should be gone");
+        client.assert(starts.indexOf("2027-02-02T14:00:00+02:00") >= 0, "14:00 should be free");
     });
 %}
 
 
 ### ======================================================================
-### E. WHO MAY ASK, AND TENANT ISOLATION
+### 4. WHAT THE DATABASE SAW (run these in PowerShell, not here)
 ### ======================================================================
-
-### E1. Bob (STAFF) asks about his OWN availability. EXPECT 200
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-16
-Authorization: Bearer {{bobToken}}
-
-> {%
-    client.test("E1: staff can see own availability", function () {
-        client.assert(response.status === 200, "status " + response.status);
-    });
-%}
-
-### E2. Bob asks about ALICE's availability. EXPECT 403 (staff work on their own schedule only,
-###     the same rule as booking)
-GET {{baseUrl}}/availability?staffId=1&serviceId=1&date=2026-11-16
-Authorization: Bearer {{bobToken}}
-
-### E3. Alice asks about GUS (membership 4 belongs to tenant 2). EXPECT 404
-GET {{baseUrl}}/availability?staffId=4&serviceId=1&date=2026-11-16
-Authorization: Bearer {{aliceToken}}
-
-### E4. Alice asks with GUS's service (service 3 belongs to tenant 2). EXPECT 404
-GET {{baseUrl}}/availability?staffId=2&serviceId=3&date=2026-11-16
-Authorization: Bearer {{aliceToken}}
-
-### E5. A USER token (no business selected). EXPECT 403
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-16
-Authorization: Bearer {{aliceUserToken}}
-
-### E6. No token. EXPECT 401
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2026-11-16
+###   docker exec -it appointme-db psql -U appointme -d appointme -c "SELECT id, staff_id, starts_at, ends_at, status, notes FROM appointments WHERE starts_at::date = '2027-02-02' ORDER BY staff_id, starts_at;"
+###
+### EXPECT 4 rows: Bob "first" CANCELLED, Bob "back to back", Bob "re-booked", Alice "other staff".
+### The rejected duplicate and overlap are NOT there: a failed insert stores nothing.
+### Notice the ids have GAPS (a rejected insert still used up an id). Sequences never roll back.
