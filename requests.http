@@ -1,295 +1,398 @@
 ### =====================================================================
-### appointMe - day13-roles.http   (Day 13: roles and tenant scoping)
-### SELF-CONTAINED: it logs in by itself and keeps its own tokens
-### (ownerToken = Alice, OWNER of tenant 1; staffToken = Bob, STAFF in tenant 1),
-### so it never touches the {{token}} used by your main requests.http.
+### appointMe - day15-working-hours.http   (Day 15: weekly working hours)
+### SELF-CONTAINED: it logs in by itself and keeps its own tokens.
 ###
-### BEFORE YOU START: reload the seed so the data is known
-###   Get-Content .\scripts\dev-seed.sql | docker exec -i appointme-db psql -U appointme -d appointme
+### BEFORE YOU START
+###   1. Put the NEW scripts/dev-seed.sql in place (it now also seeds working hours).
+###   2. Start the app once so Flyway applies V3__working_hours.sql.
+###   3. Reload the seed:
+###        Get-Content .\scripts\dev-seed.sql | docker exec -i appointme-db psql -U appointme -d appointme
 ###
-### Run SETUP first, top to bottom. Tokens last 30 minutes.
-### "EXPECT" is the status code you should see.
+### Cast (password for all: correct-horse-1)
+###   ALICE = OWNER of tenant 1, membership 1
+###   BOB   = STAFF in tenant 1, membership 2   (the staff member we edit most)
+###   GUS   = OWNER of tenant 2, membership 4
+###   Membership 3 = Bob in tenant 2 (foreign to Alice)
+###
+### The {staffId} in the URL is a MEMBERSHIP id (same number you use as staffId
+### when booking an appointment).
+###
+### Seed data: Alice Mon-Fri 09:00-17:00 | Bob Mon-Fri 09:00-13:00 + 14:00-18:00
+###            Gus Mon-Fri 08:00-16:00
+### Days are names: MONDAY ... SUNDAY. Times are "HH:mm" (24 hour clock).
+### Run top to bottom: later requests depend on the data earlier ones leave.
+### Tokens last 30 minutes. Sudden 401s => rerun SETUP.
 ### =====================================================================
 
 @baseUrl = http://localhost:8080
-@ownerStaffId = 1
-@bobStaffId = 2
-@serviceId = 1
-@customerId = 1
 
 
 ### ======================================================================
 ### SETUP
 ### ======================================================================
 
-### O1. Alice logs in. EXPECT 200 (user token, no business yet)
+### A1. Alice logs in. EXPECT 200
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 { "email": "alice@test.com", "password": "correct-horse-1" }
 
 > {%
-    client.global.set("ownerUserToken", response.body.accessToken);
+    client.global.set("aliceUserToken", response.body.accessToken);
 %}
 
-### O2. Alice selects tenant 1. EXPECT 200, role OWNER
+### A2. Alice selects tenant 1. EXPECT 200, OWNER
 POST {{baseUrl}}/auth/select-tenant/1
-Authorization: Bearer {{ownerUserToken}}
+Authorization: Bearer {{aliceUserToken}}
 
 > {%
-    client.global.set("ownerToken", response.body.accessToken);
+    client.global.set("aliceToken", response.body.accessToken);
 %}
 
-### W1. Bob logs in. EXPECT 200
+### B1. Bob logs in. EXPECT 200
 POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 { "email": "bob@test.com", "password": "correct-horse-1" }
 
 > {%
-    client.global.set("staffUserToken", response.body.accessToken);
+    client.global.set("bobUserToken", response.body.accessToken);
 %}
 
-### W2. Bob selects tenant 1. EXPECT 200, role STAFF
+### B2. Bob selects tenant 1. EXPECT 200, STAFF
 POST {{baseUrl}}/auth/select-tenant/1
-Authorization: Bearer {{staffUserToken}}
+Authorization: Bearer {{bobUserToken}}
 
 > {%
-    client.global.set("staffToken", response.body.accessToken);
+    client.global.set("bobToken", response.body.accessToken);
 %}
 
-### C0. Register Carol so the owner can add her as staff later. EXPECT 201 (rerun: 409)
-POST {{baseUrl}}/auth/register
+### G1. Gus logs in. EXPECT 200
+POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
-{ "email": "carol@example.com", "password": "correct-horse-1", "fullName": "Carol Cutter" }
-
-
-### ======================================================================
-### 1. STAFF is NOT allowed to do owner-only things  (all EXPECT 403)
-### ======================================================================
-
-### P1. Staff creates a service. EXPECT 403 (NOT 500 - see the Day 13 trap)
-POST {{baseUrl}}/services
-Authorization: Bearer {{staffToken}}
-Content-Type: application/json
-
-{ "name": "Staff Special", "durationMinutes": 10, "price": 5.00 }
-
-### P2. Staff updates a service. EXPECT 403, and the service is unchanged
-PUT {{baseUrl}}/services/{{serviceId}}
-Authorization: Bearer {{staffToken}}
-Content-Type: application/json
-
-{ "name": "Hacked by staff", "durationMinutes": 1, "price": 0.00, "active": true }
-
-### P3. Staff deletes a service. EXPECT 403, and active stays true
-DELETE {{baseUrl}}/services/{{serviceId}}
-Authorization: Bearer {{staffToken}}
-
-### P4. Staff deletes a customer. EXPECT 403 (customer delete is owner-only)
-DELETE {{baseUrl}}/customers/{{customerId}}
-Authorization: Bearer {{staffToken}}
-
-### P5. Staff adds a team member. EXPECT 403
-POST {{baseUrl}}/staff
-Authorization: Bearer {{staffToken}}
-Content-Type: application/json
-
-{ "email": "carol@example.com" }
-
-
-### ======================================================================
-### 2. STAFF is allowed to do day-to-day work  (EXPECT 200 / 201)
-### ======================================================================
-
-### P6. Staff lists services. EXPECT 200
-GET {{baseUrl}}/services
-Authorization: Bearer {{staffToken}}
-
-### P7. Staff creates a customer. EXPECT 201 (rerun: 409, same email)
-POST {{baseUrl}}/customers
-Authorization: Bearer {{staffToken}}
-Content-Type: application/json
-
-{ "fullName": "Dana Walk-in", "email": "dana@example.com" }
-
-### P8. Staff lists customers. EXPECT 200
-GET {{baseUrl}}/customers
-Authorization: Bearer {{staffToken}}
-
-### P9. Staff lists the team. EXPECT 200 (needed to pick a staffId when booking)
-GET {{baseUrl}}/staff
-Authorization: Bearer {{staffToken}}
-
-
-### ======================================================================
-### 3. OWNER can do everything
-### ======================================================================
-
-### Q1. Owner creates a service. EXPECT 201
-POST {{baseUrl}}/services
-Authorization: Bearer {{ownerToken}}
-Content-Type: application/json
-
-{ "name": "Massage", "durationMinutes": 45, "price": 40.00 }
-
-### Q2. Owner lists the team. EXPECT 200, Alice (OWNER) and Bob (STAFF), + Carol after Q3
-GET {{baseUrl}}/staff
-Authorization: Bearer {{ownerToken}}
-
-### Q3. Owner adds Carol. EXPECT 201, role STAFF (rerun: 409)
-POST {{baseUrl}}/staff
-Authorization: Bearer {{ownerToken}}
-Content-Type: application/json
-
-{ "email": "carol@example.com" }
-
-### Q4. Add Carol again. EXPECT 409
-POST {{baseUrl}}/staff
-Authorization: Bearer {{ownerToken}}
-Content-Type: application/json
-
-{ "email": "carol@example.com" }
-
-### Q5. Add Alice herself (already a member). EXPECT 409
-POST {{baseUrl}}/staff
-Authorization: Bearer {{ownerToken}}
-Content-Type: application/json
-
-{ "email": "alice@test.com" }
-
-### Q6. Email nobody registered. EXPECT 404
-POST {{baseUrl}}/staff
-Authorization: Bearer {{ownerToken}}
-Content-Type: application/json
-
-{ "email": "ghost@example.com" }
-
-### Q7. Not an email. EXPECT 400
-POST {{baseUrl}}/staff
-Authorization: Bearer {{ownerToken}}
-Content-Type: application/json
-
-{ "email": "nope" }
-
-### Q8. Trying to smuggle a role in the body. EXPECT 409 if Carol exists already,
-###     otherwise 201 - and either way the role is STAFF (the DTO has no role field)
-POST {{baseUrl}}/staff
-Authorization: Bearer {{ownerToken}}
-Content-Type: application/json
-
-{ "email": "carol@example.com", "role": "OWNER" }
-
-
-### ======================================================================
-### 4. STAFF SEES ONLY THEIR OWN APPOINTMENTS
-### (Alice = membership 1, Bob = membership 2; dates must be in the future)
-### ======================================================================
-
-### R1. Owner books an appointment for BOB. EXPECT 201 (stores its id)
-POST {{baseUrl}}/appointments
-Authorization: Bearer {{ownerToken}}
-Content-Type: application/json
-
-{ "staffId": {{bobStaffId}}, "customerId": {{customerId}}, "serviceId": {{serviceId}},
-  "startsAt": "2026-11-17T09:00:00Z", "notes": "Bob's appointment" }
+{ "email": "gus@test.com", "password": "correct-horse-1" }
 
 > {%
-    client.global.set("bobApptId", response.body.id);
+    client.global.set("gusUserToken", response.body.accessToken);
 %}
 
-### R2. Owner books an appointment for HERSELF. EXPECT 201 (stores its id)
-POST {{baseUrl}}/appointments
-Authorization: Bearer {{ownerToken}}
-Content-Type: application/json
-
-{ "staffId": {{ownerStaffId}}, "customerId": {{customerId}}, "serviceId": {{serviceId}},
-  "startsAt": "2026-11-17T11:00:00Z", "notes": "Alice's appointment" }
+### G2. Gus selects tenant 2. EXPECT 200, OWNER
+POST {{baseUrl}}/auth/select-tenant/2
+Authorization: Bearer {{gusUserToken}}
 
 > {%
-    client.global.set("aliceApptId", response.body.id);
+    client.global.set("gusToken", response.body.accessToken);
 %}
 
-### R3. Staff lists the range. EXPECT 200, ONLY Bob's appointment(s), never Alice's
-GET {{baseUrl}}/appointments?from=2026-11-01T00:00:00Z&to=2026-12-01T00:00:00Z
-Authorization: Bearer {{staffToken}}
 
-### R4. Owner lists the same range. EXPECT 200, BOTH appointments
-GET {{baseUrl}}/appointments?from=2026-11-01T00:00:00Z&to=2026-12-01T00:00:00Z
-Authorization: Bearer {{ownerToken}}
+### ======================================================================
+### 1. READ the seeded schedules (owner)
+### ======================================================================
 
-### R5. Staff reads Bob's own appointment. EXPECT 200
-GET {{baseUrl}}/appointments/{{bobApptId}}
-Authorization: Bearer {{staffToken}}
+### H1. Bob's schedule. EXPECT 200, staffId 2, 10 intervals:
+###     Mon-Fri 09:00-13:00 and 14:00-18:00, sorted by day, then start time
+GET {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
 
-### R6. Staff reads ALICE's appointment. EXPECT 404 (same tenant, but not theirs)
-GET {{baseUrl}}/appointments/{{aliceApptId}}
-Authorization: Bearer {{staffToken}}
-
-### R7. Staff changes status of ALICE's appointment. EXPECT 404, status unchanged
-PATCH {{baseUrl}}/appointments/{{aliceApptId}}/status
-Authorization: Bearer {{staffToken}}
-Content-Type: application/json
-
-{ "status": "NO_SHOW" }
-
-### R8. Staff books on their OWN schedule. EXPECT 201
-POST {{baseUrl}}/appointments
-Authorization: Bearer {{staffToken}}
-Content-Type: application/json
-
-{ "staffId": {{bobStaffId}}, "customerId": {{customerId}}, "serviceId": {{serviceId}},
-  "startsAt": "2026-11-18T09:00:00Z" }
-
-### R9. Staff books on ALICE's schedule. EXPECT 403 "own schedule"
-POST {{baseUrl}}/appointments
-Authorization: Bearer {{staffToken}}
-Content-Type: application/json
-
-{ "staffId": {{ownerStaffId}}, "customerId": {{customerId}}, "serviceId": {{serviceId}},
-  "startsAt": "2026-11-18T10:00:00Z" }
-
-### R10. Staff completes their OWN appointment. EXPECT 200, COMPLETED
-PATCH {{baseUrl}}/appointments/{{bobApptId}}/status
-Authorization: Bearer {{staffToken}}
-Content-Type: application/json
-
-{ "status": "COMPLETED" }
-
-### R11. Owner can change anyone's. EXPECT 200, NO_SHOW
-PATCH {{baseUrl}}/appointments/{{aliceApptId}}/status
-Authorization: Bearer {{ownerToken}}
-Content-Type: application/json
-
-{ "status": "NO_SHOW" }
+### H2. Alice's own schedule. EXPECT 200, staffId 1, 5 intervals (Mon-Fri 09:00-17:00)
+GET {{baseUrl}}/staff/1/working-hours
+Authorization: Bearer {{aliceToken}}
 
 
 ### ======================================================================
-### 5. TOKEN-LEVEL CHECKS
+### 2. REPLACE a schedule (PUT replaces the WHOLE week)
 ### ======================================================================
 
-### U1. USER token (no business selected) on an owner endpoint. EXPECT 403
-POST {{baseUrl}}/services
-Authorization: Bearer {{ownerUserToken}}
+### H3. New schedule for Bob. EXPECT 200, exactly 3 intervals:
+###     MONDAY 10:00-18:00, TUESDAY 10:00-14:00, TUESDAY 15:00-19:00
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
 
-{ "name": "Nope", "durationMinutes": 10, "price": 1.00 }
+{
+  "intervals": [
+    { "dayOfWeek": "TUESDAY", "start": "15:00", "end": "19:00" },
+    { "dayOfWeek": "MONDAY",  "start": "10:00", "end": "18:00" },
+    { "dayOfWeek": "TUESDAY", "start": "10:00", "end": "14:00" }
+  ]
+}
 
-### U2. USER token on a read endpoint. EXPECT 403
-GET {{baseUrl}}/services
-Authorization: Bearer {{ownerUserToken}}
+### H4. Read it back. EXPECT 200, the same 3 intervals (sorted) and NONE of the old 10
+GET {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
 
-### U3. No token at all. EXPECT 401 (not 403: the caller is unknown)
-POST {{baseUrl}}/staff
+### H5. Back-to-back intervals touch but do not overlap. EXPECT 200
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
 
-{ "email": "carol@example.com" }
+{
+  "intervals": [
+    { "dayOfWeek": "WEDNESDAY", "start": "09:00", "end": "13:00" },
+    { "dayOfWeek": "WEDNESDAY", "start": "13:00", "end": "17:00" }
+  ]
+}
 
-### U4. FORGED ROLE. Take {{staffToken}}, run the Day 12 PowerShell snippet changing
-###     "role":"STAFF" to "role":"OWNER", paste the forged token below. EXPECT 401
-POST {{baseUrl}}/services
-Authorization: Bearer PASTE.FORGED.TOKEN.HERE
+### H6. The same clock times on DIFFERENT days are fine. EXPECT 200, 3 intervals
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
 
-{ "name": "Forged", "durationMinutes": 10, "price": 1.00 }
+{
+  "intervals": [
+    { "dayOfWeek": "MONDAY",    "start": "09:00", "end": "17:00" },
+    { "dayOfWeek": "WEDNESDAY", "start": "09:00", "end": "17:00" },
+    { "dayOfWeek": "FRIDAY",    "start": "09:00", "end": "17:00" }
+  ]
+}
+
+### H7. Empty list = no working hours at all (a week off). EXPECT 200, "intervals": []
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "intervals": [] }
+
+### H8. Read it back. EXPECT 200, "intervals": []
+GET {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+
+### H9. Restore Bob's normal week (needed by the tests below). EXPECT 200, 10 intervals
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{
+  "intervals": [
+    { "dayOfWeek": "MONDAY",    "start": "09:00", "end": "13:00" },
+    { "dayOfWeek": "MONDAY",    "start": "14:00", "end": "18:00" },
+    { "dayOfWeek": "TUESDAY",   "start": "09:00", "end": "13:00" },
+    { "dayOfWeek": "TUESDAY",   "start": "14:00", "end": "18:00" },
+    { "dayOfWeek": "WEDNESDAY", "start": "09:00", "end": "13:00" },
+    { "dayOfWeek": "WEDNESDAY", "start": "14:00", "end": "18:00" },
+    { "dayOfWeek": "THURSDAY",  "start": "09:00", "end": "13:00" },
+    { "dayOfWeek": "THURSDAY",  "start": "14:00", "end": "18:00" },
+    { "dayOfWeek": "FRIDAY",    "start": "09:00", "end": "13:00" },
+    { "dayOfWeek": "FRIDAY",    "start": "14:00", "end": "18:00" }
+  ]
+}
+
+
+### ======================================================================
+### 3. VALIDATION   (all EXPECT 400; Bob's saved schedule must NOT change)
+### ======================================================================
+
+### V1. End before start. EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "intervals": [ { "dayOfWeek": "MONDAY", "start": "17:00", "end": "09:00" } ] }
+
+### V2. End equals start (an empty interval). EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "intervals": [ { "dayOfWeek": "MONDAY", "start": "09:00", "end": "09:00" } ] }
+
+### V3. Overlap on the same day (12:00 is inside 09:00-13:00). EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{
+  "intervals": [
+    { "dayOfWeek": "MONDAY", "start": "09:00", "end": "13:00" },
+    { "dayOfWeek": "MONDAY", "start": "12:00", "end": "15:00" }
+  ]
+}
+
+### V4. The exact same interval twice. EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{
+  "intervals": [
+    { "dayOfWeek": "MONDAY", "start": "09:00", "end": "13:00" },
+    { "dayOfWeek": "MONDAY", "start": "09:00", "end": "13:00" }
+  ]
+}
+
+### V5. One interval fully inside another, listed out of order. EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{
+  "intervals": [
+    { "dayOfWeek": "THURSDAY", "start": "10:00", "end": "11:00" },
+    { "dayOfWeek": "THURSDAY", "start": "09:00", "end": "17:00" }
+  ]
+}
+
+### V6. Atomic replace: after ALL the failures above, Bob must still have the 10 intervals
+###     from H9. EXPECT 200, 10 intervals. (A failed PUT must change nothing.)
+GET {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+
+### V7. Not a day name. EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "intervals": [ { "dayOfWeek": "FUNDAY", "start": "09:00", "end": "17:00" } ] }
+
+### V8. Field "intervals" missing. EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ }
+
+### V9. "intervals": null. EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "intervals": null }
+
+### V10. An interval without "start". EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "intervals": [ { "dayOfWeek": "MONDAY", "end": "17:00" } ] }
+
+### V11. A time that does not exist. EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "intervals": [ { "dayOfWeek": "MONDAY", "start": "25:00", "end": "26:00" } ] }
+
+### V12. A null inside the list. EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "intervals": [ null ] }
+
+### V13. Too many intervals (limit is 50; 51 here). EXPECT 400
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{
+  "intervals": [
+    {"dayOfWeek":"MONDAY","start":"00:00","end":"00:10"},{"dayOfWeek":"MONDAY","start":"00:20","end":"00:30"},
+    {"dayOfWeek":"MONDAY","start":"00:40","end":"00:50"},{"dayOfWeek":"MONDAY","start":"01:00","end":"01:10"},
+    {"dayOfWeek":"MONDAY","start":"01:20","end":"01:30"},{"dayOfWeek":"MONDAY","start":"01:40","end":"01:50"},
+    {"dayOfWeek":"MONDAY","start":"02:00","end":"02:10"},{"dayOfWeek":"MONDAY","start":"02:20","end":"02:30"},
+    {"dayOfWeek":"MONDAY","start":"02:40","end":"02:50"},{"dayOfWeek":"MONDAY","start":"03:00","end":"03:10"},
+    {"dayOfWeek":"MONDAY","start":"03:20","end":"03:30"},{"dayOfWeek":"MONDAY","start":"03:40","end":"03:50"},
+    {"dayOfWeek":"MONDAY","start":"04:00","end":"04:10"},{"dayOfWeek":"MONDAY","start":"04:20","end":"04:30"},
+    {"dayOfWeek":"MONDAY","start":"04:40","end":"04:50"},{"dayOfWeek":"MONDAY","start":"05:00","end":"05:10"},
+    {"dayOfWeek":"MONDAY","start":"05:20","end":"05:30"},{"dayOfWeek":"MONDAY","start":"05:40","end":"05:50"},
+    {"dayOfWeek":"MONDAY","start":"06:00","end":"06:10"},{"dayOfWeek":"MONDAY","start":"06:20","end":"06:30"},
+    {"dayOfWeek":"MONDAY","start":"06:40","end":"06:50"},{"dayOfWeek":"MONDAY","start":"07:00","end":"07:10"},
+    {"dayOfWeek":"MONDAY","start":"07:20","end":"07:30"},{"dayOfWeek":"MONDAY","start":"07:40","end":"07:50"},
+    {"dayOfWeek":"MONDAY","start":"08:00","end":"08:10"},{"dayOfWeek":"MONDAY","start":"08:20","end":"08:30"},
+    {"dayOfWeek":"MONDAY","start":"08:40","end":"08:50"},{"dayOfWeek":"MONDAY","start":"09:00","end":"09:10"},
+    {"dayOfWeek":"MONDAY","start":"09:20","end":"09:30"},{"dayOfWeek":"MONDAY","start":"09:40","end":"09:50"},
+    {"dayOfWeek":"MONDAY","start":"10:00","end":"10:10"},{"dayOfWeek":"MONDAY","start":"10:20","end":"10:30"},
+    {"dayOfWeek":"MONDAY","start":"10:40","end":"10:50"},{"dayOfWeek":"MONDAY","start":"11:00","end":"11:10"},
+    {"dayOfWeek":"MONDAY","start":"11:20","end":"11:30"},{"dayOfWeek":"MONDAY","start":"11:40","end":"11:50"},
+    {"dayOfWeek":"MONDAY","start":"12:00","end":"12:10"},{"dayOfWeek":"MONDAY","start":"12:20","end":"12:30"},
+    {"dayOfWeek":"MONDAY","start":"12:40","end":"12:50"},{"dayOfWeek":"MONDAY","start":"13:00","end":"13:10"},
+    {"dayOfWeek":"MONDAY","start":"13:20","end":"13:30"},{"dayOfWeek":"MONDAY","start":"13:40","end":"13:50"},
+    {"dayOfWeek":"MONDAY","start":"14:00","end":"14:10"},{"dayOfWeek":"MONDAY","start":"14:20","end":"14:30"},
+    {"dayOfWeek":"MONDAY","start":"14:40","end":"14:50"},{"dayOfWeek":"MONDAY","start":"15:00","end":"15:10"},
+    {"dayOfWeek":"MONDAY","start":"15:20","end":"15:30"},{"dayOfWeek":"MONDAY","start":"15:40","end":"15:50"},
+    {"dayOfWeek":"MONDAY","start":"16:00","end":"16:10"},{"dayOfWeek":"MONDAY","start":"16:20","end":"16:30"},
+    {"dayOfWeek":"MONDAY","start":"16:40","end":"16:50"}
+  ]
+}
+
+
+### ======================================================================
+### 4. WHO may do this   (owner only)
+### ======================================================================
+
+### Z1. Bob (STAFF) tries to change his own hours. EXPECT 403
+PUT {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{bobToken}}
+Content-Type: application/json
+
+{ "intervals": [ { "dayOfWeek": "SATURDAY", "start": "09:00", "end": "17:00" } ] }
+
+### Z2. Bob reads his own hours. EXPECT 403 (owner only for now; a staff view is a stretch goal)
+GET {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{bobToken}}
+
+### Z3. A USER token (no business selected). EXPECT 403
+GET {{baseUrl}}/staff/2/working-hours
+Authorization: Bearer {{aliceUserToken}}
+
+### Z4. No token. EXPECT 401
+GET {{baseUrl}}/staff/2/working-hours
+
+
+### ======================================================================
+### 5. TENANT ISOLATION   (Alice must never reach tenant 2)
+### ======================================================================
+
+### X1. Alice reads Gus's schedule (membership 4, tenant 2). EXPECT 404
+GET {{baseUrl}}/staff/4/working-hours
+Authorization: Bearer {{aliceToken}}
+
+### X2. Alice overwrites Gus's schedule. EXPECT 404 (and Gus's data unchanged, see X5/X6)
+PUT {{baseUrl}}/staff/4/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "intervals": [ { "dayOfWeek": "SUNDAY", "start": "00:00", "end": "01:00" } ] }
+
+### X3. Alice reads Bob's membership IN TENANT 2 (membership 3). EXPECT 404
+GET {{baseUrl}}/staff/3/working-hours
+Authorization: Bearer {{aliceToken}}
+
+### X4. An id that exists nowhere. EXPECT 404, the same shape as X1
+GET {{baseUrl}}/staff/99999/working-hours
+Authorization: Bearer {{aliceToken}}
+
+### X5. Gus reads his own schedule. EXPECT 200, 5 intervals Mon-Fri 08:00-16:00 (X2 changed nothing)
+GET {{baseUrl}}/staff/4/working-hours
+Authorization: Bearer {{gusToken}}
+
+### X6. Gus tries to read ALICE's schedule (membership 1, tenant 1). EXPECT 404
+GET {{baseUrl}}/staff/1/working-hours
+Authorization: Bearer {{gusToken}}
+
+### X7. Gus sets his own Saturday hours. EXPECT 200, 1 interval
+PUT {{baseUrl}}/staff/4/working-hours
+Authorization: Bearer {{gusToken}}
+Content-Type: application/json
+
+{ "intervals": [ { "dayOfWeek": "SATURDAY", "start": "09:00", "end": "12:00" } ] }
+
+### X8. Alice's own week is untouched by X7. EXPECT 200, 5 intervals
+GET {{baseUrl}}/staff/1/working-hours
+Authorization: Bearer {{aliceToken}}
+
+
+### ======================================================================
+### 6. OPTIONAL EXPERIMENT (no fixed expectation: observe and think)
+### Jackson can usually also read a number for an enum. What day does 1 mean to it?
+### Look at the response and compare with java.time.DayOfWeek.of(1).
+### This is why the API contract uses day NAMES, never numbers.
+### ======================================================================
+
+### E1. A number instead of a name. Note the status code and which day comes back.
+PUT {{baseUrl}}/staff/1/working-hours
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "intervals": [ { "dayOfWeek": 1, "start": "09:00", "end": "10:00" } ] }
