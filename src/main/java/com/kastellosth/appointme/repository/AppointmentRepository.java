@@ -1,6 +1,7 @@
 package com.kastellosth.appointme.repository ;
 
 import com.kastellosth.appointme.entity.Appointment;
+import com.kastellosth.appointme.entity.AppointmentStatus;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -40,6 +41,20 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
                                           @Param("staffId") Long staffId,
                                           @Param("from") Instant from,
                                           @Param("to") Instant to);
+
+    @Query("""
+        select a from Appointment a
+        where a.tenant.id = :tenantId
+          and a.staff.id = :staffId
+          and a.status <> :excluded
+          and a.startsAt < :to
+          and a.endsAt > :from
+        """)
+    List<Appointment> findBusyForStaff(@Param("tenantId") Long tenantId,
+                                       @Param("staffId") Long staffId,
+                                       @Param("from") Instant from,
+                                       @Param("to") Instant to,
+                                       @Param("excluded") AppointmentStatus excluded);
 
 }
 
