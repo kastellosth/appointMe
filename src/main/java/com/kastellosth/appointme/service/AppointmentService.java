@@ -2,18 +2,30 @@ package com.kastellosth.appointme.service;
 
 import com.kastellosth.appointme.dto.AppointmentRequest;
 import com.kastellosth.appointme.dto.AppointmentResponse;
-import com.kastellosth.appointme.entity.*;
+import com.kastellosth.appointme.entity.Appointment;
+import com.kastellosth.appointme.entity.AppointmentStatus;
+import com.kastellosth.appointme.entity.Customer;
+import com.kastellosth.appointme.entity.Membership;
+import com.kastellosth.appointme.entity.ServiceOffering;
+import com.kastellosth.appointme.entity.Tenant;
 import com.kastellosth.appointme.exception.BadRequestException;
 import com.kastellosth.appointme.exception.ConflictException;
+import com.kastellosth.appointme.exception.DatabaseErrors;
 import com.kastellosth.appointme.exception.ForbiddenException;
 import com.kastellosth.appointme.exception.NotFoundException;
-import com.kastellosth.appointme.repository.*;
+import com.kastellosth.appointme.repository.AppointmentRepository;
+import com.kastellosth.appointme.repository.CustomerRepository;
+import com.kastellosth.appointme.repository.MembershipRepository;
+import com.kastellosth.appointme.repository.ServiceOfferingRepository;
+import com.kastellosth.appointme.repository.TenantRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -27,12 +39,14 @@ public class AppointmentService {
     private final MembershipRepository memberships;
     private final CustomerRepository customers;
     private final ServiceOfferingRepository services;
+    private final WorkingHoursService workingHours;
 
     @Transactional
     public AppointmentResponse create(Long tenantId, Long staffScope, AppointmentRequest req) {
         if (staffScope != null && !staffScope.equals(req.staffId())) {
             throw new ForbiddenException("Staff members can only book appointments on their own schedule");
         }
+
         Tenant tenant = tenants.findById(tenantId)
                 .orElseThrow(() -> new NotFoundException("Tenant " + tenantId + " not found"));
 
@@ -48,16 +62,20 @@ public class AppointmentService {
         Membership staff = memberships.findByIdAndTenantId(req.staffId(), tenantId)
                 .orElseThrow(() -> new NotFoundException("Staff member " + req.staffId() + " not found"));
 
+        Instant startsAt = req.startsAt();
+        Instant endsAt = startsAt.plus(Duration.ofMinutes(service.getDurationMinutes()));
+        requireBookable(tenant, tenantId, staff.getId(), startsAt, endsAt);
+
         Appointment a = new Appointment();
         a.setTenant(tenant);
         a.setService(service);
         a.setCustomer(customer);
         a.setStaff(staff);
-        a.setStartsAt(req.startsAt());
-        a.setEndsAt(req.startsAt().plus(Duration.ofMinutes(service.getDurationMinutes())));
+        a.setStartsAt(startsAt);
+        a.setEndsAt(endsAt);
         a.setNotes(req.notes());
 
-        return toResponse(appointments.save(a));
+        return toResponse(saveOrConflict(a));
     }
 
     @Transactional(readOnly = true)
@@ -78,6 +96,7 @@ public class AppointmentService {
     public AppointmentResponse get(Long tenantId, Long staffScope, Long id) {
         return toResponse(find(tenantId, staffScope, id));
     }
+
     @Transactional
     public AppointmentResponse updateStatus(Long tenantId, Long staffScope, Long id,
                                             AppointmentStatus target) {
@@ -88,6 +107,66 @@ public class AppointmentService {
         }
         a.setStatus(target);
         return toResponse(a);
+    }
+
+    @Transactional
+    public AppointmentResponse cancel(Long tenantId, Long staffScope, Long id) {
+        Appointment a = find(tenantId, staffScope, id);
+        if (!a.getStatus().canTransitionTo(AppointmentStatus.CANCELLED)) {
+            throw new ConflictException(
+                    "Only SCHEDULED appointments can be cancelled (this one is " + a.getStatus() + ")");
+        }
+        a.setStatus(AppointmentStatus.CANCELLED);
+        return toResponse(a);
+    }
+
+    @Transactional
+    public AppointmentResponse reschedule(Long tenantId, Long staffScope, Long id, Instant newStart) {
+        Appointment a = find(tenantId, staffScope, id);
+        if (a.getStatus() != AppointmentStatus.SCHEDULED) {
+            throw new ConflictException(
+                    "Only SCHEDULED appointments can be rescheduled (this one is " + a.getStatus() + ")");
+        }
+        Tenant tenant = tenants.findById(tenantId)
+                .orElseThrow(() -> new NotFoundException("Tenant " + tenantId + " not found"));
+
+        Duration length = Duration.between(a.getStartsAt(), a.getEndsAt());   // keep what was booked
+        Instant newEnd = newStart.plus(length);
+        requireBookable(tenant, tenantId, a.getStaff().getId(), newStart, newEnd);
+
+        a.setStartsAt(newStart);
+        a.setEndsAt(newEnd);
+        return toResponse(saveOrConflict(a));
+    }
+
+
+    private void requireBookable(Tenant tenant, Long tenantId, Long staffId,
+                                 Instant start, Instant end) {
+        if (!start.isAfter(Instant.now())) {
+            throw new BadRequestException("The appointment must start in the future");
+        }
+        ZoneId zone = ZoneId.of(tenant.getTimezone());
+        LocalDate date = start.atZone(zone).toLocalDate();
+        var windows = workingHours.windowsFor(tenantId, staffId, date);
+        if (!AvailabilityCalculator.fitsWithinWindows(date, zone, windows,
+                new AvailabilityCalculator.Range(start, end))) {
+            throw new ConflictException("The staff member does not work at that time");
+        }
+    }
+
+    /**
+     * saveAndFlush sends the SQL NOW, inside this try block, so a clash with another
+     * booking is thrown here and not later at commit, where we could not catch it.
+     */
+    private Appointment saveOrConflict(Appointment a) {
+        try {
+            return appointments.saveAndFlush(a);
+        } catch (RuntimeException e) {
+            if (DatabaseErrors.isExclusionViolation(e)) {
+                throw new ConflictException(DatabaseErrors.SLOT_TAKEN_MESSAGE);
+            }
+            throw e;
+        }
     }
 
     private Appointment find(Long tenantId, Long staffScope, Long id) {

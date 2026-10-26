@@ -1,20 +1,19 @@
 ### =====================================================================
-### appointMe - day17-double-booking.http   (Day 17: the database says NO)
+### appointMe - day18-conflicts.http   (Day 18: clean 409s, cancel, reschedule, working hours)
 ### SELF-CONTAINED: it logs in by itself and keeps its own tokens.
 ###
 ### BEFORE YOU START (and before every re-run of this file)
-###   1. V4__no_overlapping_appointments.sql must be applied (start the app once).
-###   2. Reload the seed:
+###   1. Put the NEW scripts/dev-seed.sql in place (it now gives tenant 2's Bob working hours too).
+###   2. Reload it:
 ###        Get-Content .\scripts\dev-seed.sql | docker exec -i appointme-db psql -U appointme -d appointme
-###      (The seed restores Bob's normal week: Mon-Fri 09:00-13:00 and 14:00-18:00.)
 ###
-### All bookings are on Tuesday 2027-02-02, Haircut = 30 minutes, customer 1.
-### Times below are UTC (Z). Tenant 1 is Europe/Athens = UTC+2 in February,
-### so 10:00Z is 12:00 on the clock in Athens.
-###
-### IMPORTANT: today a clash is NOT yet a clean 409. The API will answer with an ERROR status
-### (probably 500) because nothing translates the database error yet. That is exactly what
-### Day 18 fixes. What matters today: the clash is NEVER a 201, and nothing is stored.
+### Cast (password for all: correct-horse-1)
+###   ALICE = OWNER of tenant 1, membership 1, works Mon-Fri 09:00-17:00 (Athens time)
+###   BOB   = STAFF in tenant 1, membership 2, works Mon-Fri 09:00-13:00 and 14:00-18:00
+### All bookings are on Tuesday 2027-02-09. Haircut = 30 minutes, customer 1.
+### Times below are UTC (Z). Athens is UTC+2 in February, so:
+###   07:00Z = 09:00 local   10:00Z = 12:00 local   11:00Z = 13:00 local (lunch)   12:00Z = 14:00 local
+### Sunday 2027-02-14: nobody works.
 ### =====================================================================
 
 @baseUrl = http://localhost:8080
@@ -42,133 +41,488 @@ Authorization: Bearer {{aliceUserToken}}
     client.global.set("aliceToken", response.body.accessToken);
 %}
 
+### W1. Bob logs in. EXPECT 200
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{ "email": "bob@test.com", "password": "correct-horse-1" }
+
+> {%
+    client.global.set("bobUserToken", response.body.accessToken);
+%}
+
+### W2. Bob selects tenant 1. EXPECT 200, STAFF
+POST {{baseUrl}}/auth/select-tenant/1
+Authorization: Bearer {{bobUserToken}}
+
+> {%
+    client.global.set("bobToken", response.body.accessToken);
+%}
+
 
 ### ======================================================================
-### 1. THE CONSTRAINT THROUGH YOUR API
+### B. DOUBLE-BOOKING IS NOW A CLEAN 409
 ### ======================================================================
 
-### C1. Book Bob 10:00Z-10:30Z. EXPECT 201 (remember its id)
+### B1. Book Bob 10:00Z-10:30Z (12:00 local). EXPECT 201
 POST {{baseUrl}}/appointments
 Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
 
-{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:00:00Z", "notes": "first" }
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T10:00:00Z", "notes": "b1" }
 
 > {%
-    client.global.set("firstApptId", response.body.id);
-    client.test("C1: booked", function () {
+    client.global.set("b1Id", response.body.id);
+    client.test("B1: booked", function () {
         client.assert(response.status === 201, "status " + response.status);
     });
 %}
 
-### C2. EXACTLY the same slot again. EXPECT an ERROR status (NOT 201).
-###     Today probably 500; after Day 18 it will be 409.
+### B2. EXACTLY the same slot. EXPECT 409 with the SPECIFIC message (Day 17 gave you a generic one)
 POST {{baseUrl}}/appointments
 Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
 
-{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:00:00Z", "notes": "duplicate" }
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T10:00:00Z", "notes": "duplicate" }
 
 > {%
-    client.test("C2: duplicate refused (not 201)", function () {
-        client.assert(response.status !== 201, "the duplicate was ACCEPTED, status " + response.status);
+    client.test("B2: 409, slot already booked", function () {
+        client.assert(response.status === 409, "status " + response.status);
+        client.assert(response.body.detail === "That time slot is already booked for this staff member",
+            "detail was: " + response.body.detail);
     });
 %}
 
-### C3. Partial overlap, 10:15Z-10:45Z. EXPECT an ERROR status (NOT 201)
+### B3. Partial overlap, 10:15Z. EXPECT 409, same message
 POST {{baseUrl}}/appointments
 Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
 
-{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:15:00Z", "notes": "overlap" }
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T10:15:00Z", "notes": "overlap" }
 
 > {%
-    client.test("C3: overlap refused (not 201)", function () {
-        client.assert(response.status !== 201, "the overlap was ACCEPTED, status " + response.status);
+    client.test("B3: 409, slot already booked", function () {
+        client.assert(response.status === 409, "status " + response.status);
+        client.assert(response.body.detail === "That time slot is already booked for this staff member",
+            "detail was: " + response.body.detail);
     });
 %}
 
-### C4. Back-to-back, 10:30Z-11:00Z. EXPECT 201 (the end of one is the start of the next)
+### B4. Back-to-back, 10:30Z-11:00Z (12:30-13:00 local, ends exactly at closing). EXPECT 201
 POST {{baseUrl}}/appointments
 Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
 
-{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:30:00Z", "notes": "back to back" }
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T10:30:00Z", "notes": "b4" }
 
 > {%
-    client.test("C4: back-to-back allowed", function () {
+    client.global.set("b4Id", response.body.id);
+    client.test("B4: back-to-back allowed", function () {
         client.assert(response.status === 201, "status " + response.status);
     });
 %}
 
-### C5. A DIFFERENT staff member (Alice herself, membership 1) at the same time. EXPECT 201
+### B5. Alice (a different staff member) at the same time. EXPECT 201
 POST {{baseUrl}}/appointments
 Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
 
-{ "staffId": 1, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:00:00Z", "notes": "other staff" }
+{ "staffId": 1, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T10:00:00Z", "notes": "alice" }
 
 > {%
-    client.test("C5: different staff allowed", function () {
-        client.assert(response.status === 201, "status " + response.status);
-    });
-%}
-
-
-### ======================================================================
-### 2. CANCELLING FREES THE SLOT
-### ======================================================================
-
-### C6. Cancel the first appointment. EXPECT 200, CANCELLED
-PATCH {{baseUrl}}/appointments/{{firstApptId}}/status
-Authorization: Bearer {{aliceToken}}
-Content-Type: application/json
-
-{ "status": "CANCELLED" }
-
-### C7. Book Bob 10:00Z again (the slot C1 had). EXPECT 201
-POST {{baseUrl}}/appointments
-Authorization: Bearer {{aliceToken}}
-Content-Type: application/json
-
-{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-02T10:00:00Z", "notes": "re-booked" }
-
-> {%
-    client.test("C7: slot reused after cancel", function () {
+    client.global.set("aliceApptId", response.body.id);
+    client.test("B5: other staff allowed", function () {
         client.assert(response.status === 201, "status " + response.status);
     });
 %}
 
 
 ### ======================================================================
-### 3. AVAILABILITY (Day 16) AND THE CONSTRAINT AGREE
-### Bob is now busy 10:00Z-11:00Z = 12:00-13:00 Athens time (C7 + C4).
+### W. WORKING HOURS ARE ENFORCED WHEN BOOKING
 ### ======================================================================
 
-### C8. Bob's free slots, Tuesday 2027-02-02, Haircut. EXPECT 200 and 26 slots
-###     (30 without bookings). Morning slots 11:45, 12:00, 12:15 and 12:30 are gone;
-###     11:30 and the afternoon 14:00 ... 17:30 are still there.
-GET {{baseUrl}}/availability?staffId=2&serviceId=1&date=2027-02-02
+### W1. 06:00Z = 08:00 local, before Bob starts at 09:00. EXPECT 409
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T06:00:00Z" }
+
+> {%
+    client.test("W1: before opening", function () {
+        client.assert(response.status === 409, "status " + response.status);
+        client.assert(response.body.detail === "The staff member does not work at that time",
+            "detail was: " + response.body.detail);
+    });
+%}
+
+### W2. 11:00Z = 13:00 local, Bob's lunch break. EXPECT 409
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T11:00:00Z" }
+
+> {%
+    client.test("W2: lunch break", function () {
+        client.assert(response.status === 409, "status " + response.status);
+    });
+%}
+
+### W3. 10:45Z = 12:45 local: 30 minutes would end at 13:15, after the morning window closes. EXPECT 409
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T10:45:00Z" }
+
+> {%
+    client.test("W3: straddles closing time", function () {
+        client.assert(response.status === 409, "status " + response.status);
+    });
+%}
+
+### W4. 12:00Z = 14:00 local, the very start of the afternoon window. EXPECT 201
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T12:00:00Z", "notes": "w4" }
+
+> {%
+    client.global.set("w4Id", response.body.id);
+    client.test("W4: exactly at reopening", function () {
+        client.assert(response.status === 201, "status " + response.status);
+    });
+%}
+
+### W5. Sunday 2027-02-14: Bob has no hours that day. EXPECT 409
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-14T10:00:00Z" }
+
+> {%
+    client.test("W5: day off", function () {
+        client.assert(response.status === 409, "status " + response.status);
+    });
+%}
+
+### W6. In the past. EXPECT 400 with errors.startsAt (the @Future check on the DTO still runs first)
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2020-01-07T10:00:00Z" }
+
+> {%
+    client.test("W6: past", function () {
+        client.assert(response.status === 400, "status " + response.status);
+    });
+%}
+
+### W7. Another tenant's customer (customer 3), at a valid time. EXPECT 404
+###     (the ownership lookups run BEFORE the working-hours check)
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 3, "serviceId": 1, "startsAt": "2027-02-09T08:00:00Z" }
+
+> {%
+    client.test("W7: foreign customer is a 404, not a working-hours error", function () {
+        client.assert(response.status === 404, "status " + response.status);
+    });
+%}
+
+### W8. Alice outside HER hours: 15:30Z = 17:30 local, she finishes at 17:00. EXPECT 409
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 1, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T15:30:00Z" }
+
+> {%
+    client.test("W8: after Alice's closing time", function () {
+        client.assert(response.status === 409, "status " + response.status);
+    });
+%}
+
+
+### ======================================================================
+### X. CANCEL   (PATCH /appointments/{id}/cancel)
+### ======================================================================
+
+### X1. Cancel B1. EXPECT 200, status CANCELLED
+PATCH {{baseUrl}}/appointments/{{b1Id}}/cancel
 Authorization: Bearer {{aliceToken}}
 
 > {%
-    client.test("C8: 26 slots, the booked hour is gone", function () {
+    client.test("X1: cancelled", function () {
         client.assert(response.status === 200, "status " + response.status);
-        var starts = response.body.slots.map(function (x) { return x.startsAt; });
-        client.assert(starts.length === 26, "slot count " + starts.length);
-        client.assert(starts.indexOf("2027-02-02T11:30:00+02:00") >= 0, "11:30 should be free");
-        client.assert(starts.indexOf("2027-02-02T11:45:00+02:00") < 0, "11:45 should be gone");
-        client.assert(starts.indexOf("2027-02-02T12:30:00+02:00") < 0, "12:30 should be gone");
-        client.assert(starts.indexOf("2027-02-02T14:00:00+02:00") >= 0, "14:00 should be free");
+        client.assert(response.body.status === "CANCELLED", "status field " + response.body.status);
+    });
+%}
+
+### X2. Cancel it again. EXPECT 409 (only SCHEDULED appointments can be cancelled)
+PATCH {{baseUrl}}/appointments/{{b1Id}}/cancel
+Authorization: Bearer {{aliceToken}}
+
+> {%
+    client.test("X2: already cancelled", function () {
+        client.assert(response.status === 409, "status " + response.status);
+        client.assert(response.body.detail.indexOf("Only SCHEDULED") === 0, "detail was: " + response.body.detail);
+    });
+%}
+
+### X3. The freed slot can be booked again (10:00Z). EXPECT 201
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T10:00:00Z", "notes": "x3" }
+
+> {%
+    client.global.set("x3Id", response.body.id);
+    client.test("X3: slot reused", function () {
+        client.assert(response.status === 201, "status " + response.status);
+    });
+%}
+
+### X4. Mark the new one COMPLETED (Day 9 endpoint). EXPECT 200
+PATCH {{baseUrl}}/appointments/{{x3Id}}/status
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "status": "COMPLETED" }
+
+### X5. Cancel a COMPLETED appointment. EXPECT 409
+PATCH {{baseUrl}}/appointments/{{x3Id}}/cancel
+Authorization: Bearer {{aliceToken}}
+
+> {%
+    client.test("X5: completed cannot be cancelled", function () {
+        client.assert(response.status === 409, "status " + response.status);
+    });
+%}
+
+### X6. An id that does not exist. EXPECT 404
+PATCH {{baseUrl}}/appointments/99999/cancel
+Authorization: Bearer {{aliceToken}}
+
+### X7. Bob (STAFF) cancels ALICE's appointment. EXPECT 404 (not his, so it "does not exist" for him)
+PATCH {{baseUrl}}/appointments/{{aliceApptId}}/cancel
+Authorization: Bearer {{bobToken}}
+
+> {%
+    client.test("X7: staff cannot touch a colleague's appointment", function () {
+        client.assert(response.status === 404, "status " + response.status);
+    });
+%}
+
+### X8. Bob cancels his OWN afternoon appointment (W4). EXPECT 200, CANCELLED
+PATCH {{baseUrl}}/appointments/{{w4Id}}/cancel
+Authorization: Bearer {{bobToken}}
+
+> {%
+    client.test("X8: staff cancels own", function () {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.status === "CANCELLED", "status field " + response.body.status);
     });
 %}
 
 
 ### ======================================================================
-### 4. WHAT THE DATABASE SAW (run these in PowerShell, not here)
+### R. RESCHEDULE   (PATCH /appointments/{id}/reschedule, body: { "startsAt": ... })
+### The length of the appointment is kept (30 minutes). The end is recomputed.
 ### ======================================================================
-###   docker exec -it appointme-db psql -U appointme -d appointme -c "SELECT id, staff_id, starts_at, ends_at, status, notes FROM appointments WHERE starts_at::date = '2027-02-02' ORDER BY staff_id, starts_at;"
-###
-### EXPECT 4 rows: Bob "first" CANCELLED, Bob "back to back", Bob "re-booked", Alice "other staff".
-### The rejected duplicate and overlap are NOT there: a failed insert stores nothing.
-### Notice the ids have GAPS (a rejected insert still used up an id). Sequences never roll back.
+
+### R0. A fresh appointment for Bob at 07:00Z (09:00 local). EXPECT 201
+POST {{baseUrl}}/appointments
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "staffId": 2, "customerId": 1, "serviceId": 1, "startsAt": "2027-02-09T07:00:00Z", "notes": "to be moved" }
+
+> {%
+    client.global.set("rId", response.body.id);
+    client.test("R0: booked", function () {
+        client.assert(response.status === 201, "status " + response.status);
+    });
+%}
+
+### R1. Move it 15 minutes later: 07:15Z. The new time OVERLAPS ITS OWN old time, which is fine.
+###     EXPECT 200, startsAt 2027-02-09T07:15:00Z, endsAt 2027-02-09T07:45:00Z
+PATCH {{baseUrl}}/appointments/{{rId}}/reschedule
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "startsAt": "2027-02-09T07:15:00Z" }
+
+> {%
+    client.test("R1: moved, length kept", function () {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.startsAt === "2027-02-09T07:15:00Z", "startsAt " + response.body.startsAt);
+        client.assert(response.body.endsAt === "2027-02-09T07:45:00Z", "endsAt " + response.body.endsAt);
+    });
+%}
+
+### R2. Move it onto 10:00Z, which Bob's COMPLETED appointment (X3) still occupies. EXPECT 409
+PATCH {{baseUrl}}/appointments/{{rId}}/reschedule
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "startsAt": "2027-02-09T10:00:00Z" }
+
+> {%
+    client.test("R2: target slot taken", function () {
+        client.assert(response.status === 409, "status " + response.status);
+        client.assert(response.body.detail === "That time slot is already booked for this staff member",
+            "detail was: " + response.body.detail);
+    });
+%}
+
+### R3. A failed reschedule changes NOTHING. EXPECT 200, startsAt still 2027-02-09T07:15:00Z
+GET {{baseUrl}}/appointments/{{rId}}
+Authorization: Bearer {{aliceToken}}
+
+> {%
+    client.test("R3: unchanged after the failure", function () {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.startsAt === "2027-02-09T07:15:00Z", "startsAt " + response.body.startsAt);
+    });
+%}
+
+### R4. Move to 05:00Z = 07:00 local, before Bob works. EXPECT 409 "does not work at that time"
+PATCH {{baseUrl}}/appointments/{{rId}}/reschedule
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "startsAt": "2027-02-09T05:00:00Z" }
+
+> {%
+    client.test("R4: outside working hours", function () {
+        client.assert(response.status === 409, "status " + response.status);
+        client.assert(response.body.detail === "The staff member does not work at that time",
+            "detail was: " + response.body.detail);
+    });
+%}
+
+### R5. Move to the past. EXPECT 400, message mentions the future
+###     (this DTO has no @Future: the SERVICE enforces it, so it works for any caller)
+PATCH {{baseUrl}}/appointments/{{rId}}/reschedule
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "startsAt": "2020-01-07T10:00:00Z" }
+
+> {%
+    client.test("R5: past", function () {
+        client.assert(response.status === 400, "status " + response.status);
+        client.assert(response.body.detail.indexOf("future") >= 0, "detail was: " + response.body.detail);
+    });
+%}
+
+### R6. Reschedule a CANCELLED appointment (B1). EXPECT 409 "Only SCHEDULED appointments can be rescheduled"
+PATCH {{baseUrl}}/appointments/{{b1Id}}/reschedule
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "startsAt": "2027-02-09T08:00:00Z" }
+
+> {%
+    client.test("R6: cancelled cannot be moved", function () {
+        client.assert(response.status === 409, "status " + response.status);
+        client.assert(response.body.detail.indexOf("Only SCHEDULED") === 0, "detail was: " + response.body.detail);
+    });
+%}
+
+### R7. Missing "startsAt". EXPECT 400 with errors.startsAt
+PATCH {{baseUrl}}/appointments/{{rId}}/reschedule
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ }
+
+> {%
+    client.test("R7: validation", function () {
+        client.assert(response.status === 400, "status " + response.status);
+        client.assert(response.body.errors && response.body.errors.startsAt, "errors.startsAt missing");
+    });
+%}
+
+### R8. Bob (STAFF) tries to move ALICE's appointment. EXPECT 404
+PATCH {{baseUrl}}/appointments/{{aliceApptId}}/reschedule
+Authorization: Bearer {{bobToken}}
+Content-Type: application/json
+
+{ "startsAt": "2027-02-09T08:00:00Z" }
+
+> {%
+    client.test("R8: not his appointment", function () {
+        client.assert(response.status === 404, "status " + response.status);
+    });
+%}
+
+### R9. Bob moves his OWN appointment to 07:30Z. EXPECT 200
+PATCH {{baseUrl}}/appointments/{{rId}}/reschedule
+Authorization: Bearer {{bobToken}}
+Content-Type: application/json
+
+{ "startsAt": "2027-02-09T07:30:00Z" }
+
+> {%
+    client.test("R9: staff moves own", function () {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.startsAt === "2027-02-09T07:30:00Z", "startsAt " + response.body.startsAt);
+    });
+%}
+
+### R10. Move to Sunday 2027-02-14 (nobody works). EXPECT 409
+PATCH {{baseUrl}}/appointments/{{rId}}/reschedule
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "startsAt": "2027-02-14T10:00:00Z" }
+
+> {%
+    client.test("R10: day off", function () {
+        client.assert(response.status === 409, "status " + response.status);
+    });
+%}
+
+### R11. The OWNER may move Bob's appointment: 08:00Z (10:00 local). EXPECT 200
+PATCH {{baseUrl}}/appointments/{{rId}}/reschedule
+Authorization: Bearer {{aliceToken}}
+Content-Type: application/json
+
+{ "startsAt": "2027-02-09T08:00:00Z" }
+
+> {%
+    client.test("R11: owner moves it", function () {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.startsAt === "2027-02-09T08:00:00Z", "startsAt " + response.body.startsAt);
+    });
+%}
+
+
+### ======================================================================
+### F. FINAL STATE
+### ======================================================================
+
+### F1. Everything on 2027-02-09 (owner). EXPECT 200 and 6 appointments:
+###     b1 CANCELLED 10:00Z | b4 10:30Z | Alice 10:00Z | w4 CANCELLED 12:00Z | x3 COMPLETED 10:00Z | moved one 08:00Z
+GET {{baseUrl}}/appointments?from=2027-02-09T00:00:00Z&to=2027-02-10T00:00:00Z
+Authorization: Bearer {{aliceToken}}
+
+> {%
+    client.test("F1: six appointments", function () {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.length === 6, "count " + response.body.length);
+    });
+%}
+
+### The database's view (run in PowerShell, not here):
+###   docker exec -it appointme-db psql -U appointme -d appointme -c "SELECT id, staff_id, starts_at, ends_at, status, notes, version FROM appointments WHERE starts_at::date = '2027-02-09' ORDER BY staff_id, starts_at;"
+### The moved appointment has version > 0 (each update bumps it). Rejected attempts left no trace.

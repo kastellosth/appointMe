@@ -47,11 +47,12 @@ INSERT INTO memberships (user_id, tenant_id, role) VALUES
 -- Working hours (1 = Monday ... 7 = Sunday). Wall-clock times in the tenant's zone.
 --   Alice (membership 1): Mon-Fri 09:00-17:00
 --   Bob   (membership 2): Mon-Fri 09:00-13:00 and 14:00-18:00 (lunch break)
---   Gus   (membership 4): Mon-Fri 08:00-16:00
+--   Bob   (membership 3, tenant 2) and Gus (membership 4): Mon-Fri 08:00-16:00 (London time)
 INSERT INTO working_hours (tenant_id, staff_id, day_of_week, start_time, end_time)
 SELECT 1, 1, d, TIME '09:00', TIME '17:00' FROM generate_series(1, 5) AS d
 UNION ALL SELECT 1, 2, d, TIME '09:00', TIME '13:00' FROM generate_series(1, 5) AS d
 UNION ALL SELECT 1, 2, d, TIME '14:00', TIME '18:00' FROM generate_series(1, 5) AS d
+UNION ALL SELECT 2, 3, d, TIME '08:00', TIME '16:00' FROM generate_series(1, 5) AS d
 UNION ALL SELECT 2, 4, d, TIME '08:00', TIME '16:00' FROM generate_series(1, 5) AS d;
 
 -- Show what you got

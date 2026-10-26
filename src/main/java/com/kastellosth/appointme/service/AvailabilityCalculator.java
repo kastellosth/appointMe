@@ -74,4 +74,11 @@ public final class AvailabilityCalculator {
     static Instant toInstant(LocalDate date, LocalTime time, ZoneId zone) {
         return date.atTime(time).atZone(zone).toInstant();
     }
+
+    public static boolean fitsWithinWindows(LocalDate date, ZoneId zone,
+                                            List<LocalWindow> working, Range range) {
+        return working.stream()
+                .map(w -> new Range(toInstant(date, w.start(), zone), toInstant(date, w.end(), zone)))
+                .anyMatch(w -> !range.start().isBefore(w.start()) && !range.end().isAfter(w.end()));
+    }
 }

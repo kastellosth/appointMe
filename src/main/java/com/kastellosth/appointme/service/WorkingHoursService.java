@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 
@@ -67,5 +68,13 @@ public class WorkingHoursService {
                 .map(r -> new ScheduleInterval(DayOfWeek.of(r.getDayOfWeek()), r.getStartTime(), r.getEndTime()))
                 .toList();
         return new WorkingHoursResponse(staffId, intervals);
+    }
+    @Transactional(readOnly = true)
+    public List<AvailabilityCalculator.LocalWindow> windowsFor(Long tenantId, Long staffId, LocalDate date) {
+        int weekday = date.getDayOfWeek().getValue();
+        return workingHours.findByTenantIdAndStaffId(tenantId, staffId).stream()
+                .filter(w -> w.getDayOfWeek() == weekday)
+                .map(w -> new AvailabilityCalculator.LocalWindow(w.getStartTime(), w.getEndTime()))
+                .toList();
     }
 }

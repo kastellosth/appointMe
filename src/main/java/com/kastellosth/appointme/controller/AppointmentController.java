@@ -2,6 +2,7 @@ package com.kastellosth.appointme.controller;
 
 import com.kastellosth.appointme.dto.AppointmentRequest;
 import com.kastellosth.appointme.dto.AppointmentResponse;
+import com.kastellosth.appointme.dto.RescheduleRequest;
 import com.kastellosth.appointme.dto.StatusUpdateRequest;
 import com.kastellosth.appointme.entity.MembershipRole;
 import com.kastellosth.appointme.security.CurrentUser;
@@ -53,4 +54,19 @@ public class AppointmentController {
     private Long staffScope() {
         return currentUser.role() == MembershipRole.STAFF ? currentUser.membershipId() : null;
     }
+
+    @PatchMapping("/{id}/cancel")
+    public AppointmentResponse cancel(@PathVariable Long id) {
+        return service.cancel(currentUser.tenantId(), staffScope(), id);
+    }
+
+    @PatchMapping("/{id}/reschedule")
+    public AppointmentResponse reschedule(@PathVariable Long id,
+                                          @Valid @RequestBody RescheduleRequest req) {
+        return service.reschedule(currentUser.tenantId(), staffScope(), id, req.startsAt());
+    }
+
+
+
 }
+

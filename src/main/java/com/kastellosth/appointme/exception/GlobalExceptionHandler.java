@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -39,12 +40,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.BAD_REQUEST, "Bad request", ex.getMessage());
     }
 
-    // Database constraint violations that slipped past our own checks
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex) {
+        // Safety net: if a clash surfaces outside the service's try/catch (for instance at commit)
+        if (DatabaseErrors.isExclusionViolation(ex)) {
+            return problem(HttpStatus.CONFLICT, "Conflict", DatabaseErrors.SLOT_TAKEN_MESSAGE);
+        }
         log.warn("Data integrity violation", ex);
-        return problem(HttpStatus.CONFLICT, "Conflict",
-                "The request conflicts with existing data");
+        return problem(HttpStatus.CONFLICT, "Conflict", "The request conflicts with existing data");
     }
 
     // Anything unexpected: log everything, tell the client nothing
@@ -93,7 +96,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "Forbidden",
                 "You do not have permission to perform this action");
     }
-
+    // @Version at work: two people edited the same row at the same moment
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ProblemDetail handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
+        return problem(HttpStatus.CONFLICT, "Conflict",
+                "This record was changed by someone else. Reload it and try again.");
+    }
     private ProblemDetail problem(HttpStatus status, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
         pd.setTitle(title);
