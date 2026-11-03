@@ -2,6 +2,7 @@ package com.kastellosth.appointme.exception;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -102,6 +103,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Conflict",
                 "This record was changed by someone else. Reload it and try again.");
     }
+
+    @ExceptionHandler(PessimisticLockingFailureException.class)
+    public ProblemDetail handleLockFailure(PessimisticLockingFailureException ex) {
+        log.warn("Lock failure", ex);
+        return problem(HttpStatus.CONFLICT, "Conflict", DatabaseErrors.SLOT_CONTENDED_MESSAGE);
+    }
+
     private ProblemDetail problem(HttpStatus status, String title, String detail) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
         pd.setTitle(title);
