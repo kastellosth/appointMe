@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.controller;
 
+import com.kastellosth.appointme.dto.TenantBillingRequest;
 import com.kastellosth.appointme.dto.TenantRequest;
 import com.kastellosth.appointme.dto.TenantResponse;
 import com.kastellosth.appointme.security.CurrentUser;
@@ -8,6 +9,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/tenants")
@@ -26,5 +28,12 @@ public class TenantController {
     @GetMapping("/current")
     public TenantResponse current() {
         return tenantService.getById(currentUser.tenantId());
+    }
+
+    /** Day 21: tax rate and currency of the business in the token. Owner only. */
+    @PutMapping("/current/billing")
+    @PreAuthorize("hasRole('OWNER')")
+    public TenantResponse updateBilling(@Valid @RequestBody TenantBillingRequest request) {
+        return tenantService.updateBilling(currentUser.tenantId(), request);
     }
 }

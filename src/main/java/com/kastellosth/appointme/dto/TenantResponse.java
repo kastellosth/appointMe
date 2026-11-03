@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.dto;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 public record TenantResponse(
@@ -7,6 +8,8 @@ public record TenantResponse(
         String name,
         String slug,
         String timezone,
+        BigDecimal taxRate,
+        String currency,
         Instant createdAt
 ) {
-}
+}

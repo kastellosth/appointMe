@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 
 @Entity
@@ -27,6 +28,14 @@ public class Tenant {
     @Column(nullable = false)
     private String timezone = "UTC";
 
+    /** Day 21. A fraction: 0.2400 means 24 %. Copied into every new invoice line. */
+    @Column(name = "tax_rate", nullable = false, precision = 5, scale = 4)
+    private BigDecimal taxRate = new BigDecimal("0.0000");
+
+    /** Day 21. ISO 4217 code, e.g. EUR. Copied into every new invoice. */
+    @Column(nullable = false, length = 3)
+    private String currency = "EUR";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
-}
+}

@@ -40,6 +40,7 @@ public class AppointmentService {
     private final CustomerRepository customers;
     private final ServiceOfferingRepository services;
     private final WorkingHoursService workingHours;
+    private final InvoiceService invoiceService;
 
     @Transactional
     public AppointmentResponse create(Long tenantId, Long staffScope, AppointmentRequest req) {
@@ -105,7 +106,16 @@ public class AppointmentService {
             throw new ConflictException(
                     "Cannot change status from " + a.getStatus() + " to " + target);
         }
+        // Day 21: "it happened" / "they did not come" only makes sense once it has started.
+        if ((target == AppointmentStatus.COMPLETED || target == AppointmentStatus.NO_SHOW)
+                && a.getStartsAt().isAfter(Instant.now())) {
+            throw new ConflictException("An appointment that has not started yet cannot be marked " + target);
+        }
         a.setStatus(target);
+        if (target == AppointmentStatus.COMPLETED) {
+            // Same transaction: if the invoice cannot be created, the appointment stays SCHEDULED.
+            invoiceService.createDraftForCompletedAppointment(a);
+        }
         return toResponse(a);
     }
 
@@ -165,10 +175,14 @@ public class AppointmentService {
             if (DatabaseErrors.isExclusionViolation(e)) {
                 throw new ConflictException(DatabaseErrors.SLOT_TAKEN_MESSAGE);
             }
+            if (DatabaseErrors.isDeadlock(e)) {
+                // Two bookings collided head-on and the database picked this one to give up.
+                // Nothing was stored. For the client it is the same answer: not available, try again.
+                throw new ConflictException(DatabaseErrors.SLOT_CONTENDED_MESSAGE);
+            }
             throw e;
         }
     }
-
     private Appointment find(Long tenantId, Long staffScope, Long id) {
         Appointment a = appointments.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new NotFoundException("Appointment " + id + " not found"));
@@ -187,4 +201,4 @@ public class AppointmentService {
                 a.getStartsAt(), a.getEndsAt(),
                 a.getStatus(), a.getNotes(), a.getCreatedAt());
     }
-}
+}

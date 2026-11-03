@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.service;
 
+import com.kastellosth.appointme.dto.TenantBillingRequest;
 import com.kastellosth.appointme.dto.TenantRequest;
 import com.kastellosth.appointme.dto.TenantResponse;
 import com.kastellosth.appointme.entity.Membership;
@@ -13,6 +14,7 @@ import com.kastellosth.appointme.exception.UnauthorizedException;
 import com.kastellosth.appointme.repository.MembershipRepository;
 import com.kastellosth.appointme.repository.TenantRepository;
 import com.kastellosth.appointme.repository.UserRepository;
+import com.kastellosth.appointme.support.Money;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,8 +70,18 @@ public class TenantService {
         return toResponse(tenant);
     }
 
+    /** Day 21: the owner sets the tax rate and currency. Only NEW invoice lines use them. */
+    @Transactional
+    public TenantResponse updateBilling(Long tenantId, TenantBillingRequest request) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new NotFoundException("Tenant " + tenantId + " not found"));
+        tenant.setTaxRate(Money.exactRate(request.taxRate()));
+        tenant.setCurrency(request.currency());
+        return toResponse(tenantRepository.saveAndFlush(tenant));
+    }
+
     private TenantResponse toResponse(Tenant tenant) {
         return new TenantResponse(tenant.getId(), tenant.getName(), tenant.getSlug(),
-                tenant.getTimezone(), tenant.getCreatedAt());
+                tenant.getTimezone(), tenant.getTaxRate(), tenant.getCurrency(), tenant.getCreatedAt());
     }
-}
+}
