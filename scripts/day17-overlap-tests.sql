@@ -1,5 +1,5 @@
 -- =====================================================================
--- Day 17: try to break the exclusion constraint.
+-- Try to break the exclusion constraint.
 -- Run (after reloading the seed):
 --   Get-Content .\scripts\day17-overlap-tests.sql | docker exec -i appointme-db psql -U appointme -d appointme
 -- Bob = membership 2 (tenant 1), Alice = membership 1, Bob@tenant2 = membership 3.

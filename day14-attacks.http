@@ -1,5 +1,5 @@
 ### =====================================================================
-### appointMe - day14-attacks.http   (Day 14: attack your own system)
+### appointMe - day14-attacks.http   (attack your own system)
 ###
 ### Cast (all password: correct-horse-1; load the NEW scripts/dev-seed.sql first):
 ###   ALICE = OWNER of tenant 1 "Test Barber"   <- the ATTACKER

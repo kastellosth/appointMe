@@ -3,6 +3,7 @@ package com.kastellosth.appointme.service;
 import com.kastellosth.appointme.dto.InvoicePaymentsResponse;
 import com.kastellosth.appointme.dto.PaymentRequest;
 import com.kastellosth.appointme.dto.PaymentResponse;
+import com.kastellosth.appointme.entity.AuditAction;
 import com.kastellosth.appointme.entity.Invoice;
 import com.kastellosth.appointme.entity.InvoiceStatus;
 import com.kastellosth.appointme.entity.Payment;
@@ -40,11 +41,14 @@ public class PaymentService {
     private final InvoiceRepository invoices;
     private final PaymentRepository payments;
     private final IdempotencyService idempotency;
+    private final AuditService audit;
 
-    public PaymentService(InvoiceRepository invoices, PaymentRepository payments, IdempotencyService idempotency) {
+    public PaymentService(InvoiceRepository invoices, PaymentRepository payments, IdempotencyService idempotency,
+                          AuditService audit) {
         this.invoices = invoices;
         this.payments = payments;
         this.idempotency = idempotency;
+        this.audit = audit;
     }
 
     @Transactional
@@ -83,6 +87,14 @@ public class PaymentService {
         if (payment.settlesInvoice()) {
             invoice.markPaid(payment.getReceivedAt());
             invoices.saveAndFlush(invoice);
+        }
+
+        // Only a real payment reaches this line. A replay returned above, so a retry adds no history.
+        // The reference is left out on purpose: it is free text and could hold personal data.
+        audit.record(tenantId, AuditAction.PAYMENT_RECORDED, invoiceId, "payment " + payment.getId() + ": "
+                + amount + " " + invoice.getCurrency() + " " + request.method() + ", balance " + payment.getBalanceAfter());
+        if (payment.settlesInvoice()) {
+            audit.record(tenantId, AuditAction.INVOICE_PAID, invoiceId, "ISSUED -> PAID");
         }
 
         // 5) Remember the result under the key. Commits together with the payment, or not at all.

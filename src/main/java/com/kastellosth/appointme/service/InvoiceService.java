@@ -7,6 +7,7 @@ import com.kastellosth.appointme.dto.InvoiceSummaryResponse;
 import com.kastellosth.appointme.dto.PageResponse;
 import com.kastellosth.appointme.entity.Appointment;
 import com.kastellosth.appointme.entity.AppointmentStatus;
+import com.kastellosth.appointme.entity.AuditAction;
 import com.kastellosth.appointme.entity.Invoice;
 import com.kastellosth.appointme.entity.InvoiceLine;
 import com.kastellosth.appointme.entity.InvoiceStatus;
@@ -51,19 +52,21 @@ public class InvoiceService {
     private final TenantRepository tenants;
     private final InvoiceNumberService numbers;
     private final PaymentRepository payments;
+    private final AuditService audit;
 
     public InvoiceService(InvoiceRepository invoices, CustomerRepository customers,
                           AppointmentRepository appointments, TenantRepository tenants,
-                          InvoiceNumberService numbers, PaymentRepository payments) {
+                          InvoiceNumberService numbers, PaymentRepository payments, AuditService audit) {
         this.invoices = invoices;
         this.customers = customers;
         this.appointments = appointments;
         this.tenants = tenants;
         this.numbers = numbers;
         this.payments = payments;
+        this.audit = audit;
     }
 
-    // ------------------------------------------------------------- Day 21: automatic draft
+    // ------------------------------------------------------------- automatic draft
 
     /**
      * Called by AppointmentService when an appointment becomes COMPLETED.
@@ -97,10 +100,13 @@ public class InvoiceService {
                 service.getName() + " (" + when + ")", 1, service.getPrice(), tenant.getTaxRate())));
         // saveAndFlush: if the database refuses (for example a second live invoice created at the
         // same moment, uq_invoices_one_live_per_appointment), we find out here, before commit.
-        return invoices.saveAndFlush(invoice);
+        Invoice saved = invoices.saveAndFlush(invoice);
+        audit.record(tenantId, AuditAction.INVOICE_CREATED, saved.getId(),
+                "automatic draft for appointment " + appointment.getId() + ", total " + saved.getTotal());
+        return saved;
     }
 
-    // ------------------------------------------------------------- by hand (Day 20)
+    // ------------------------------------------------------------- by hand
 
     @Transactional
     public InvoiceResponse create(Long tenantId, InvoiceRequest request) {
@@ -120,11 +126,13 @@ public class InvoiceService {
             }
         }
 
-        // Day 21: defaults come from the business, not from a constant
+        // Defaults come from the business, not from a constant
         String currency = request.currency() == null ? tenant.getCurrency() : request.currency();
         Invoice invoice = Invoice.draft(tenantId, request.customerId(), request.appointmentId(), currency);
         invoice.replaceLines(toLines(request.lines(), tenant));
-        return InvoiceResponse.from(invoices.saveAndFlush(invoice));
+        Invoice saved = invoices.saveAndFlush(invoice);
+        audit.record(tenantId, AuditAction.INVOICE_CREATED, saved.getId(), "draft by hand, total " + saved.getTotal());
+        return InvoiceResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
@@ -132,7 +140,7 @@ public class InvoiceService {
         return InvoiceResponse.from(find(tenantId, id));
     }
 
-    /** Day 21. Filters are optional; the tenant is not. Sorting is fixed: newest first. */
+    /** Filters are optional; the tenant is not. Sorting is fixed: newest first. */
     @Transactional(readOnly = true)
     public PageResponse<InvoiceSummaryResponse> list(Long tenantId, InvoiceStatus status, Long customerId,
                                                      Long appointmentId, Instant createdFrom, Instant createdTo,
@@ -149,7 +157,10 @@ public class InvoiceService {
     public InvoiceResponse replaceLines(Long tenantId, Long id, List<InvoiceLineRequest> lines) {
         Invoice invoice = find(tenantId, id);
         invoice.replaceLines(toLines(lines, tenant(tenantId)));
-        return InvoiceResponse.from(invoices.saveAndFlush(invoice));
+        Invoice saved = invoices.saveAndFlush(invoice);
+        audit.record(tenantId, AuditAction.INVOICE_LINES_REPLACED, id,
+                "line count " + saved.getLines().size() + ", total " + saved.getTotal());
+        return InvoiceResponse.from(saved);
     }
 
     @Transactional
@@ -165,18 +176,23 @@ public class InvoiceService {
 
         // 3) Take the number INSIDE this transaction: if anything below fails, the number is given back.
         invoice.issue(numbers.next(tenantId, year), now, PAYMENT_TERM);
-        return InvoiceResponse.from(invoices.saveAndFlush(invoice));
+        Invoice saved = invoices.saveAndFlush(invoice);
+        audit.record(tenantId, AuditAction.INVOICE_ISSUED, id, "number " + saved.getNumber() + ", total " + saved.getTotal());
+        return InvoiceResponse.from(saved);
     }
 
     @Transactional
     public InvoiceResponse voidInvoice(Long tenantId, Long id) {
         Invoice invoice = find(tenantId, id);
-        // Day 22: money was received, so voiding would hide it. A refund must come first (not built yet).
+        // Money was received, so voiding would hide it. A refund must come first (not built yet).
         if (payments.sumForInvoice(tenantId, id) != null) {
             throw new ConflictException("An invoice that has received payments cannot be voided");
         }
+        InvoiceStatus before = invoice.getStatus();
         invoice.voidInvoice();
-        return InvoiceResponse.from(invoices.saveAndFlush(invoice));
+        Invoice saved = invoices.saveAndFlush(invoice);
+        audit.record(tenantId, AuditAction.INVOICE_VOIDED, id, before + " -> VOID");
+        return InvoiceResponse.from(saved);
     }
 
     private Invoice find(Long tenantId, Long id) {
@@ -189,7 +205,7 @@ public class InvoiceService {
                 .orElseThrow(() -> new NotFoundException("Tenant " + tenantId + " not found"));
     }
 
-    /** A line without a tax rate gets the business's rate (Day 21; on Day 20 it got 0). */
+    /** A line without a tax rate gets the business's rate. */
     private List<InvoiceLine> toLines(List<InvoiceLineRequest> requests, Tenant tenant) {
         if (requests == null) {
             return List.of();

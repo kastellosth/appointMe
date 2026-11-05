@@ -36,7 +36,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
-    // Day 22: an Idempotency-Key reused for a different request
+    // An Idempotency-Key reused for a different request
     @ExceptionHandler(UnprocessableException.class)
     public ProblemDetail handleUnprocessable(UnprocessableException ex) {
         return problem(HttpStatus.valueOf(422), "Unprocessable", ex.getMessage());

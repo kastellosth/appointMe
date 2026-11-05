@@ -1,5 +1,5 @@
 ### =====================================================================
-### Day 22: payments and the Idempotency-Key
+### Payments and the Idempotency-Key
 ### Before running: reload the seed, start the app, then Run All.
 ###   Get-Content .\scripts\dev-seed.sql | docker exec -i appointme-db psql -U appointme -d appointme
 ### Keys are fixed strings: the seed reload empties idempotency_keys, so the file can run again after a reload.
@@ -314,7 +314,7 @@ Authorization: Bearer {{owner}}
     });
 %}
 
-### M7 the temporary Day 20 endpoint is gone  -> 404
+### M7 the removed mark-paid endpoint is gone  -> 404
 POST {{host}}/invoices/{{inv}}/mark-paid
 Authorization: Bearer {{owner}}
 

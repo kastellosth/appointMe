@@ -5,6 +5,7 @@ import com.kastellosth.appointme.dto.TenantRequest;
 import com.kastellosth.appointme.dto.TenantResponse;
 import com.kastellosth.appointme.entity.Membership;
 import com.kastellosth.appointme.entity.MembershipRole;
+import com.kastellosth.appointme.entity.AuditAction;
 import com.kastellosth.appointme.entity.Tenant;
 import com.kastellosth.appointme.entity.User;
 import com.kastellosth.appointme.exception.BadRequestException;
@@ -29,6 +30,7 @@ public class TenantService {
     private final TenantRepository tenantRepository;
     private final UserRepository userRepository;
     private final MembershipRepository membershipRepository;
+    private final AuditService audit;
 
     @Transactional
     public TenantResponse create(Long ownerUserId, TenantRequest request) {
@@ -70,18 +72,22 @@ public class TenantService {
         return toResponse(tenant);
     }
 
-    /** Day 21: the owner sets the tax rate and currency. Only NEW invoice lines use them. */
+    /** The owner sets the tax rate and currency. Only NEW invoice lines use them. */
     @Transactional
     public TenantResponse updateBilling(Long tenantId, TenantBillingRequest request) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new NotFoundException("Tenant " + tenantId + " not found"));
+        String before = "tax " + tenant.getTaxRate() + " " + tenant.getCurrency();
         tenant.setTaxRate(Money.exactRate(request.taxRate()));
         tenant.setCurrency(request.currency());
-        return toResponse(tenantRepository.saveAndFlush(tenant));
+        Tenant saved = tenantRepository.saveAndFlush(tenant);
+        audit.record(tenantId, AuditAction.TENANT_BILLING_CHANGED, tenantId,
+                before + " -> tax " + saved.getTaxRate() + " " + saved.getCurrency());
+        return toResponse(saved);
     }
 
     private TenantResponse toResponse(Tenant tenant) {
         return new TenantResponse(tenant.getId(), tenant.getName(), tenant.getSlug(),
                 tenant.getTimezone(), tenant.getTaxRate(), tenant.getCurrency(), tenant.getCreatedAt());
     }
-}
+}

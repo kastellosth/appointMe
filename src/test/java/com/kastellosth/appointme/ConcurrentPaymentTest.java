@@ -24,7 +24,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Day 22. Two races, two defences:
+ * Two races, two defences:
  *   A) the SAME payment sent 20 times at once (same Idempotency-Key)  -> exactly 1 payment, 20 identical answers
  *   B) 10 DIFFERENT full payments for one invoice at once              -> exactly 1 wins, the rest 409, never overpaid
  * Runs against the DEV database (Docker must be up), in its own throw-away business.

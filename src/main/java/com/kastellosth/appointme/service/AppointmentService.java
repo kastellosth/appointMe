@@ -4,6 +4,7 @@ import com.kastellosth.appointme.dto.AppointmentRequest;
 import com.kastellosth.appointme.dto.AppointmentResponse;
 import com.kastellosth.appointme.entity.Appointment;
 import com.kastellosth.appointme.entity.AppointmentStatus;
+import com.kastellosth.appointme.entity.AuditAction;
 import com.kastellosth.appointme.entity.Customer;
 import com.kastellosth.appointme.entity.Membership;
 import com.kastellosth.appointme.entity.ServiceOffering;
@@ -41,6 +42,7 @@ public class AppointmentService {
     private final ServiceOfferingRepository services;
     private final WorkingHoursService workingHours;
     private final InvoiceService invoiceService;
+    private final AuditService audit;
 
     @Transactional
     public AppointmentResponse create(Long tenantId, Long staffScope, AppointmentRequest req) {
@@ -76,7 +78,10 @@ public class AppointmentService {
         a.setEndsAt(endsAt);
         a.setNotes(req.notes());
 
-        return toResponse(saveOrConflict(a));
+        Appointment saved = saveOrConflict(a);
+        // notes and the customer's name stay out of the log: they are personal data
+        audit.record(tenantId, AuditAction.APPOINTMENT_CREATED, saved.getId(), "starts " + startsAt);
+        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -106,12 +111,14 @@ public class AppointmentService {
             throw new ConflictException(
                     "Cannot change status from " + a.getStatus() + " to " + target);
         }
-        // Day 21: "it happened" / "they did not come" only makes sense once it has started.
+        // "It happened" / "they did not come" only makes sense once it has started.
         if ((target == AppointmentStatus.COMPLETED || target == AppointmentStatus.NO_SHOW)
                 && a.getStartsAt().isAfter(Instant.now())) {
             throw new ConflictException("An appointment that has not started yet cannot be marked " + target);
         }
+        AppointmentStatus before = a.getStatus();
         a.setStatus(target);
+        audit.record(tenantId, AuditAction.APPOINTMENT_STATUS_CHANGED, id, before + " -> " + target);
         if (target == AppointmentStatus.COMPLETED) {
             // Same transaction: if the invoice cannot be created, the appointment stays SCHEDULED.
             invoiceService.createDraftForCompletedAppointment(a);
@@ -126,7 +133,9 @@ public class AppointmentService {
             throw new ConflictException(
                     "Only SCHEDULED appointments can be cancelled (this one is " + a.getStatus() + ")");
         }
+        AppointmentStatus before = a.getStatus();
         a.setStatus(AppointmentStatus.CANCELLED);
+        audit.record(tenantId, AuditAction.APPOINTMENT_CANCELLED, id, before + " -> CANCELLED");
         return toResponse(a);
     }
 
@@ -144,9 +153,12 @@ public class AppointmentService {
         Instant newEnd = newStart.plus(length);
         requireBookable(tenant, tenantId, a.getStaff().getId(), newStart, newEnd);
 
+        Instant oldStart = a.getStartsAt();
         a.setStartsAt(newStart);
         a.setEndsAt(newEnd);
-        return toResponse(saveOrConflict(a));
+        Appointment saved = saveOrConflict(a);
+        audit.record(tenantId, AuditAction.APPOINTMENT_RESCHEDULED, id, oldStart + " -> " + newStart);
+        return toResponse(saved);
     }
 
 

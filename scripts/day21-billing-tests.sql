@@ -1,5 +1,5 @@
 -- =====================================================================
--- Day 21: try to break V6 (tenant billing, stored line tax, same-customer rule)
+-- Try to break V6 (tenant billing, stored line tax, same-customer rule)
 -- and compare the two rounding strategies with real numbers.
 -- Run (after reloading the seed):
 --   Get-Content .\scripts\day21-billing-tests.sql | docker exec -i appointme-db psql -U appointme -d appointme

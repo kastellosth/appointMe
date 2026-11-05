@@ -30,7 +30,7 @@ public class TenantController {
         return tenantService.getById(currentUser.tenantId());
     }
 
-    /** Day 21: tax rate and currency of the business in the token. Owner only. */
+    /** Tax rate and currency of the business in the token. Owner only. */
     @PutMapping("/current/billing")
     @PreAuthorize("hasRole('OWNER')")
     public TenantResponse updateBilling(@Valid @RequestBody TenantBillingRequest request) {

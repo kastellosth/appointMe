@@ -12,7 +12,7 @@ import org.springframework.data.repository.query.Param;
 import java.util.Optional;
 
 /**
- * JpaSpecificationExecutor (Day 21) lets GET /invoices combine optional filters
+ * JpaSpecificationExecutor lets GET /invoices combine optional filters
  * without one query method per combination. See InvoiceFilters.
  */
 public interface InvoiceRepository extends JpaRepository<Invoice, Long>, JpaSpecificationExecutor<Invoice> {
@@ -24,7 +24,7 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long>, JpaSpec
     boolean existsByTenantIdAndAppointmentIdAndStatusNot(Long tenantId, Long appointmentId, InvoiceStatus status);
 
     /**
-     * Day 22. Loads the invoice AND locks its row until the transaction ends (SELECT ... FOR NO KEY UPDATE
+     * Loads the invoice AND locks its row until the transaction ends (SELECT ... FOR NO KEY UPDATE
      * on PostgreSQL). A second payment for the same invoice waits here, so "read balance, then insert"
      * cannot race: the second one sees the first one's payment.
      */

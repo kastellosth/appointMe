@@ -1,4 +1,4 @@
--- Day 17 PRE-FLIGHT: list pairs of overlapping, non-cancelled appointments for the same staff member.
+-- PRE-FLIGHT: list pairs of overlapping, non-cancelled appointments for the same staff member.
 -- Must return ZERO rows before V4 can be applied.
 SELECT a.id AS appt_a, b.id AS appt_b, a.staff_id,
        a.starts_at AS a_start, a.ends_at AS a_end,

@@ -1,5 +1,5 @@
 ### =====================================================================
-### appointMe - day18-conflicts.http   (Day 18: clean 409s, cancel, reschedule, working hours)
+### appointMe - day18-conflicts.http   (clean 409s, cancel, reschedule, working hours)
 ### SELF-CONTAINED: it logs in by itself and keeps its own tokens.
 ###
 ### BEFORE YOU START (and before every re-run of this file)
@@ -78,7 +78,7 @@ Content-Type: application/json
     });
 %}
 
-### B2. EXACTLY the same slot. EXPECT 409 with the SPECIFIC message (Day 17 gave you a generic one)
+### B2. EXACTLY the same slot. EXPECT 409 with the SPECIFIC message
 POST {{baseUrl}}/appointments
 Authorization: Bearer {{aliceToken}}
 Content-Type: application/json
@@ -290,7 +290,7 @@ Content-Type: application/json
     });
 %}
 
-### X4. Mark the new one COMPLETED (Day 9 endpoint). EXPECT 200
+### X4. Mark the new one COMPLETED. EXPECT 200
 PATCH {{baseUrl}}/appointments/{{x3Id}}/status
 Authorization: Bearer {{aliceToken}}
 Content-Type: application/json

@@ -46,7 +46,7 @@ public class InvoiceLine {
     private BigDecimal lineTotal;
 
     /**
-     * Day 21: the tax of this line, calculated ONCE (when the line is made) and stored.
+     * The tax of this line, calculated ONCE (when the line is made) and stored.
      * Reading an old invoice never recalculates it, so a future change of the rounding rule
      * cannot change what an issued invoice says.
      */

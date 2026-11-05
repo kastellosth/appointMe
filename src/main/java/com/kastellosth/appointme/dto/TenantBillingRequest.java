@@ -8,7 +8,7 @@ import jakarta.validation.constraints.Pattern;
 
 import java.math.BigDecimal;
 
-/** Day 21. Both fields are required: PUT replaces the billing settings as a whole. */
+/** Both fields are required: PUT replaces the billing settings as a whole. */
 public record TenantBillingRequest(
         /** A fraction: 0.24 = 24 %. At most 4 decimals. */
         @NotNull @DecimalMin("0") @DecimalMax("1") @Digits(integer = 1, fraction = 4) BigDecimal taxRate,

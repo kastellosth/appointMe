@@ -1,5 +1,5 @@
 -- =====================================================================
--- Day 22: try to break the payment tables (V7).
+-- Try to break the payment tables (V7).
 -- Run (after reloading the seed):
 --   Get-Content .\scripts\day22-payment-tests.sql | docker exec -i appointme-db psql -U appointme -d appointme
 -- ERROR lines are the PASSES for the tests marked EXPECT ERROR.

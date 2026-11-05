@@ -68,7 +68,7 @@ public final class RaceTestData {
     }
 
     /**
-     * Day 22. Payments and issued invoices are protected by triggers that refuse DELETE (on purpose).
+     * Payments and issued invoices are protected by triggers that refuse DELETE (on purpose).
      * A throw-away test business must still be removable, so this switches triggers off for ONE
      * connection only: session_replication_role = replica (needs a superuser; the Docker user is one).
      * Other connections keep every rule. Never do this in application code.
@@ -79,7 +79,7 @@ public final class RaceTestData {
                 st.execute("SET session_replication_role = replica");
             }
             try {
-                for (String table : new String[]{"idempotency_keys", "payments", "invoice_lines", "invoices",
+                for (String table : new String[]{"audit_events", "idempotency_keys", "payments", "invoice_lines", "invoices",
                         "invoice_counters"}) {
                     try (PreparedStatement ps = con.prepareStatement("DELETE FROM " + table + " WHERE tenant_id = ?")) {
                         ps.setLong(1, tenantId);

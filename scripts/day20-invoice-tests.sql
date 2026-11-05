@@ -1,5 +1,5 @@
 -- =====================================================================
--- Day 20: try to break the invoice tables (V5).
+-- Try to break the invoice tables (V5).
 -- Run (after reloading the seed):
 --   Get-Content .\scripts\day20-invoice-tests.sql | docker exec -i appointme-db psql -U appointme -d appointme
 -- Tenant 1: customer 1, staff membership 2.  Tenant 2: customer 3.
@@ -73,7 +73,7 @@ DELETE FROM invoices WHERE id = 1;
 \echo '--- I19 ISSUED -> DRAFT                                         EXPECT ERROR illegal invoice status change'
 UPDATE invoices SET status = 'DRAFT' WHERE id = 1;
 
-\echo '--- I20 ISSUED -> PAID (Day 22: needs payments = total first)  EXPECT INSERT 0 1 then UPDATE 1'
+\echo '--- I20 ISSUED -> PAID (needs payments = total first)  EXPECT INSERT 0 1 then UPDATE 1'
 INSERT INTO payments (tenant_id, invoice_id, amount, method, balance_after) VALUES (1, 1, 62.00, 'CASH', 0.00);
 UPDATE invoices SET status = 'PAID', paid_at = now() WHERE id = 1;
 

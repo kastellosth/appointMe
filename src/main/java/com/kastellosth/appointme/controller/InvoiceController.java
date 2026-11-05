@@ -38,7 +38,7 @@ public class InvoiceController {
     }
 
     /**
-     * Day 21. Every filter is optional. Example:
+     * Every filter is optional. Example:
      *   GET /invoices?status=DRAFT&customerId=1&page=0&size=20
      * Sorting is fixed (newest first) on purpose: a client cannot ask to sort by a column without an index.
      * The @Min/@Max on page and size are checked by Spring's built-in method validation -> 400.

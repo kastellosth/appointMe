@@ -5,10 +5,10 @@
 -- flyway_schema_history is NOT touched, so migrations stay applied.
 -- =====================================================================
 
-TRUNCATE idempotency_keys, payments, invoice_lines, invoices, invoice_counters, working_hours, appointments, customers, services, memberships, users, tenants
+TRUNCATE audit_events, idempotency_keys, payments, invoice_lines, invoices, invoice_counters, working_hours, appointments, customers, services, memberships, users, tenants
     RESTART IDENTITY CASCADE;
 
--- Tenants: id 1 and id 2   (Day 21: tax rate and currency per business)
+-- Tenants: id 1 and id 2   (tax rate and currency per business)
 INSERT INTO tenants (name, slug, timezone, tax_rate, currency) VALUES
   ('Test Barber', 'test-barber', 'Europe/Athens', 0.2400, 'EUR'),   -- tenant 1: 24 %
   ('Second Gym',  'second-gym',  'Europe/London', 0.2000, 'GBP');   -- tenant 2: 20 %
@@ -36,7 +36,7 @@ INSERT INTO users (email, password_hash, full_name) VALUES
 --   membership 1 = Alice, OWNER in tenant 1
 --   membership 2 = Bob,   STAFF in tenant 1
 --   membership 3 = Bob,   STAFF in tenant 2   (for cross-tenant attack tests)
---   membership 4 = Gus,   OWNER in tenant 2   (the victim business in Day 14 attacks)
+--   membership 4 = Gus,   OWNER in tenant 2   (the victim business in the attack tests)
 INSERT INTO memberships (user_id, tenant_id, role) VALUES
   (1, 1, 'OWNER'),
   (2, 1, 'STAFF'),
@@ -55,7 +55,7 @@ UNION ALL SELECT 1, 2, d, TIME '14:00', TIME '18:00' FROM generate_series(1, 5) 
 UNION ALL SELECT 2, 3, d, TIME '08:00', TIME '16:00' FROM generate_series(1, 5) AS d
 UNION ALL SELECT 2, 4, d, TIME '08:00', TIME '16:00' FROM generate_series(1, 5) AS d;
 
--- Day 21: appointments for the invoice tests. Inserted directly (the API refuses past times).
+-- Appointments for the invoice tests. Inserted directly (the API refuses past times).
 -- Times are always relative to TODAY, so the seed keeps working on any day.
 --   appointment 1: tenant 1, Alice, Ann, Haircut    YESTERDAY 10:00 Athens  -> can be completed
 --   appointment 2: tenant 1, Bob,   Ben, Beard Trim YESTERDAY 11:00 Athens  -> can be completed

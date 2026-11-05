@@ -1,5 +1,5 @@
 ### =====================================================================
-### Day 21: automatic draft invoices, tenant billing settings, GET /invoices
+### Automatic draft invoices, tenant billing settings, GET /invoices
 ### Before running: reload the seed (it creates appointments 1-4, see dev-seed.sql)
 ###   Get-Content .\scripts\dev-seed.sql | docker exec -i appointme-db psql -U appointme -d appointme
 ### Then: Run All. Every request has a client.test, so a red test is a real failure.

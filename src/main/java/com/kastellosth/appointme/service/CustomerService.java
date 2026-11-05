@@ -3,6 +3,7 @@ package com.kastellosth.appointme.service;
 import com.kastellosth.appointme.dto.CustomerRequest;
 import com.kastellosth.appointme.dto.CustomerResponse;
 import com.kastellosth.appointme.dto.PageResponse;
+import com.kastellosth.appointme.entity.AuditAction;
 import com.kastellosth.appointme.entity.Customer;
 import com.kastellosth.appointme.entity.Tenant;
 import com.kastellosth.appointme.exception.ConflictException;
@@ -21,6 +22,7 @@ public class CustomerService {
 
     private final CustomerRepository repository;
     private final TenantRepository tenantRepository;
+    private final AuditService audit;
 
     @Transactional
     public CustomerResponse create(Long tenantId, CustomerRequest req) {
@@ -29,7 +31,10 @@ public class CustomerService {
         Customer c = new Customer();
         c.setTenant(tenant);
         apply(c, req, tenantId);
-        return toResponse(repository.save(c));
+        Customer saved = repository.save(c);
+        // ids only: a customer's name or email must not end up in a table that cannot be erased
+        audit.record(tenantId, AuditAction.CUSTOMER_CREATED, saved.getId(), null);
+        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
@@ -50,12 +55,15 @@ public class CustomerService {
     public CustomerResponse update(Long tenantId, Long id, CustomerRequest req) {
         Customer c = find(tenantId, id);
         apply(c, req, tenantId);
+        audit.record(tenantId, AuditAction.CUSTOMER_UPDATED, id, null);
         return toResponse(c);
     }
 
     @Transactional
     public void delete(Long tenantId, Long id) {
         repository.delete(find(tenantId, id));
+        // if the DELETE fails at commit (the customer has invoices), this event is rolled back with it
+        audit.record(tenantId, AuditAction.CUSTOMER_DELETED, id, null);
     }
 
     private Customer find(Long tenantId, Long id) {

@@ -1,10 +1,10 @@
 ### =====================================================================
-### appointMe - day20-invoices.http   (Day 20: invoices and the status machine)
+### appointMe - day20-invoices.http   (invoices and the status machine)
 ### SELF-CONTAINED: it logs in by itself and keeps its own ids.
 ###
 ### BEFORE YOU START (and before every re-run of this file)
 ###   1. V5__invoices.sql must be applied (start the app once).
-###   2. Reload the seed (the Day 20 seed also empties the invoice tables and
+###   2. Reload the seed (the seed also empties the invoice tables and
 ###      restarts the invoice numbers):
 ###        Get-Content .\scripts\dev-seed.sql | docker exec -i appointme-db psql -U appointme -d appointme
 ###
@@ -214,7 +214,7 @@ Authorization: Bearer {{aliceToken}}
 ### 3. PAID is final
 ### ======================================================================
 
-### P1. Mark paid (temporary endpoint; Day 22 replaces it with real payments). EXPECT 200, PAID, paidAt set
+### P1. Mark paid (temporary endpoint; real payments replace it). EXPECT 200, PAID, paidAt set
 POST {{baseUrl}}/invoices/{{invMain}}/mark-paid
 Authorization: Bearer {{aliceToken}}
 

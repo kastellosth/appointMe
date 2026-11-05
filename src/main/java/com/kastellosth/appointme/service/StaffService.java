@@ -1,6 +1,7 @@
 package com.kastellosth.appointme.service;
 
 import com.kastellosth.appointme.dto.StaffResponse;
+import com.kastellosth.appointme.entity.AuditAction;
 import com.kastellosth.appointme.entity.Membership;
 import com.kastellosth.appointme.entity.MembershipRole;
 import com.kastellosth.appointme.entity.Tenant;
@@ -23,6 +24,7 @@ public class StaffService {
     private final MembershipRepository memberships;
     private final UserRepository users;
     private final TenantRepository tenants;
+    private final AuditService audit;
 
     @Transactional
     public StaffResponse add(Long tenantId, String email) {
@@ -40,7 +42,9 @@ public class StaffService {
         m.setUser(user);
         m.setTenant(tenant);
         m.setRole(MembershipRole.STAFF);
-        return toResponse(memberships.save(m));
+        Membership saved = memberships.save(m);
+        audit.record(tenantId, AuditAction.STAFF_ADDED, saved.getId(), "user " + user.getId() + " as STAFF");
+        return toResponse(saved);
     }
 
     @Transactional(readOnly = true)
