@@ -1,6 +1,10 @@
 package com.kastellosth.appointme.support;
 
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.sql.PreparedStatement;
+import java.sql.Statement;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.UUID;
@@ -53,6 +57,7 @@ public final class RaceTestData {
         if (w == null) {
             return;
         }
+        deleteMoney(jdbc, w.tenantId());
         jdbc.update("DELETE FROM appointments WHERE tenant_id = ?", w.tenantId());
         jdbc.update("DELETE FROM working_hours WHERE tenant_id = ?", w.tenantId());
         jdbc.update("DELETE FROM customers WHERE tenant_id = ?", w.tenantId());
@@ -60,5 +65,34 @@ public final class RaceTestData {
         jdbc.update("DELETE FROM memberships WHERE tenant_id = ?", w.tenantId());
         jdbc.update("DELETE FROM users WHERE id = ?", w.userId());
         jdbc.update("DELETE FROM tenants WHERE id = ?", w.tenantId());
+    }
+
+    /**
+     * Day 22. Payments and issued invoices are protected by triggers that refuse DELETE (on purpose).
+     * A throw-away test business must still be removable, so this switches triggers off for ONE
+     * connection only: session_replication_role = replica (needs a superuser; the Docker user is one).
+     * Other connections keep every rule. Never do this in application code.
+     */
+    private static void deleteMoney(JdbcTemplate jdbc, Long tenantId) {
+        jdbc.execute((ConnectionCallback<Void>) con -> {
+            try (Statement st = con.createStatement()) {
+                st.execute("SET session_replication_role = replica");
+            }
+            try {
+                for (String table : new String[]{"idempotency_keys", "payments", "invoice_lines", "invoices",
+                        "invoice_counters"}) {
+                    try (PreparedStatement ps = con.prepareStatement("DELETE FROM " + table + " WHERE tenant_id = ?")) {
+                        ps.setLong(1, tenantId);
+                        ps.executeUpdate();
+                    }
+                }
+            } finally {
+                // the connection goes back to the pool: always restore the normal mode
+                try (Statement st = con.createStatement()) {
+                    st.execute("SET session_replication_role = DEFAULT");
+                }
+            }
+            return null;
+        });
     }
 }

@@ -1,0 +1,405 @@
+### =====================================================================
+### Day 22: payments and the Idempotency-Key
+### Before running: reload the seed, start the app, then Run All.
+###   Get-Content .\scripts\dev-seed.sql | docker exec -i appointme-db psql -U appointme -d appointme
+### Keys are fixed strings: the seed reload empties idempotency_keys, so the file can run again after a reload.
+### =====================================================================
+
+@host = http://localhost:8080
+
+### L1 Alice logs in
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "email": "alice@test.com", "password": "correct-horse-1" }
+
+> {% client.global.set("aliceLogin", response.body.accessToken); %}
+
+### L2 Alice picks tenant 1 (OWNER)
+POST {{host}}/auth/select-tenant/1
+Authorization: Bearer {{aliceLogin}}
+
+> {% client.global.set("owner", response.body.accessToken); %}
+
+### L3 Bob logs in
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "email": "bob@test.com", "password": "correct-horse-1" }
+
+> {% client.global.set("bobLogin", response.body.accessToken); %}
+
+### L4 Bob picks tenant 1 (STAFF)
+POST {{host}}/auth/select-tenant/1
+Authorization: Bearer {{bobLogin}}
+
+> {% client.global.set("staff", response.body.accessToken); %}
+
+### L5 Gus logs in
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "email": "gus@test.com", "password": "correct-horse-1" }
+
+> {% client.global.set("gusLogin", response.body.accessToken); %}
+
+### L6 Gus picks tenant 2
+POST {{host}}/auth/select-tenant/2
+Authorization: Bearer {{gusLogin}}
+
+> {% client.global.set("gus", response.body.accessToken); %}
+
+
+### ---------------------------------------------------------- setup: an ISSUED invoice of 31.00
+
+### S1 complete appointment 1 (Haircut 25.00 + 24 %)  -> draft invoice
+PATCH {{host}}/appointments/1/status
+Authorization: Bearer {{owner}}
+Content-Type: application/json
+
+{ "status": "COMPLETED" }
+
+> {% client.test("S1 200", () => client.assert(response.status === 200, "status " + response.status)); %}
+
+### S2 find the draft
+GET {{host}}/invoices?appointmentId=1
+Authorization: Bearer {{owner}}
+
+> {%
+    client.test("S2 found", () => client.assert(response.body.totalElements === 1, "totalElements " + response.body.totalElements));
+    client.global.set("inv", response.body.content[0].id);
+%}
+
+### S3 a DRAFT cannot receive payments  -> 409
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-draft
+Content-Type: application/json
+
+{ "amount": 10.00, "method": "CASH" }
+
+> {% client.test("S3 409", () => client.assert(response.status === 409, "status " + response.status)); %}
+
+### S4 issue it  -> total 31.00
+POST {{host}}/invoices/{{inv}}/issue
+Authorization: Bearer {{owner}}
+
+> {%
+    client.test("S4 issued", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.total === 31, "total " + response.body.total);
+    });
+%}
+
+### S5 nothing paid yet
+GET {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+
+> {%
+    client.test("S5 balance 31", () => {
+        client.assert(response.status === 200, "status " + response.status);
+        client.assert(response.body.paid === 0, "paid " + response.body.paid);
+        client.assert(response.body.balance === 31, "balance " + response.body.balance);
+        client.assert(response.body.payments.length === 0, "payments " + response.body.payments.length);
+    });
+%}
+
+
+### ---------------------------------------------------------- bad requests (400)
+
+### B1 no Idempotency-Key header  -> 400
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Content-Type: application/json
+
+{ "amount": 10.00, "method": "CASH" }
+
+> {% client.test("B1 400", () => client.assert(response.status === 400, "status " + response.status)); %}
+
+### B2 key too short  -> 400
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: abc
+Content-Type: application/json
+
+{ "amount": 10.00, "method": "CASH" }
+
+> {% client.test("B2 400", () => client.assert(response.status === 400, "status " + response.status)); %}
+
+### B3 amount 0  -> 400
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-b3
+Content-Type: application/json
+
+{ "amount": 0, "method": "CASH" }
+
+> {% client.test("B3 400", () => client.assert(response.status === 400, "status " + response.status)); %}
+
+### B4 three decimals  -> 400
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-b4
+Content-Type: application/json
+
+{ "amount": 10.001, "method": "CASH" }
+
+> {% client.test("B4 400", () => client.assert(response.status === 400, "status " + response.status)); %}
+
+### B5 unknown method  -> 400
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-b5
+Content-Type: application/json
+
+{ "amount": 10.00, "method": "BITCOIN" }
+
+> {% client.test("B5 400", () => client.assert(response.status === 400, "status " + response.status)); %}
+
+
+### ---------------------------------------------------------- the idempotency key at work
+
+### K1 first payment 10.00 with key ...0001  -> 201, NEW, balance 21.00
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-0001
+Content-Type: application/json
+
+{ "amount": 10.00, "method": "CASH" }
+
+> {%
+    client.test("K1 201 new", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.headers.valueOf("Idempotent-Replayed") === "false", "replayed header");
+        client.assert(response.body.amount === 10, "amount " + response.body.amount);
+        client.assert(response.body.balanceAfter === 21, "balanceAfter " + response.body.balanceAfter);
+        client.assert(response.body.invoicePaid === false, "invoicePaid");
+    });
+    client.global.set("payment1", response.body.id);
+%}
+
+### K2 EXACTLY the same request again (a retry)  -> 201, REPLAYED, same payment id, still balance 21.00
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-0001
+Content-Type: application/json
+
+{ "amount": 10.00, "method": "CASH" }
+
+> {%
+    client.test("K2 replayed", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.headers.valueOf("Idempotent-Replayed") === "true", "replayed header");
+        client.assert(response.body.id == client.global.get("payment1"), "id " + response.body.id);
+        client.assert(response.body.balanceAfter === 21, "balanceAfter " + response.body.balanceAfter);
+    });
+%}
+
+### K3 same key, amount written as 10 instead of 10.00 (same value)  -> still a replay
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-0001
+Content-Type: application/json
+
+{ "amount": 10, "method": "CASH" }
+
+> {%
+    client.test("K3 replayed", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.headers.valueOf("Idempotent-Replayed") === "true", "replayed header");
+        client.assert(response.body.id == client.global.get("payment1"), "id " + response.body.id);
+    });
+%}
+
+### K4 same key, DIFFERENT amount  -> 422 (a client bug: neither replaying nor paying would be right)
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-0001
+Content-Type: application/json
+
+{ "amount": 11.00, "method": "CASH" }
+
+> {% client.test("K4 422", () => client.assert(response.status === 422, "status " + response.status)); %}
+
+### K5 still only ONE payment so far (K2, K3 and K4 paid nothing)
+GET {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+
+> {%
+    client.test("K5 one payment", () => {
+        client.assert(response.body.payments.length === 1, "payments " + response.body.payments.length);
+        client.assert(response.body.balance === 21, "balance " + response.body.balance);
+    });
+%}
+
+
+### ---------------------------------------------------------- balance rules
+
+### M1 25.00 with a new key ...0002, but only 21.00 is open  -> 409
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-0002
+Content-Type: application/json
+
+{ "amount": 25.00, "method": "CARD" }
+
+> {% client.test("M1 409", () => client.assert(response.status === 409, "status " + response.status)); %}
+
+### M2 the SAME key ...0002 with the right amount  -> 201 NEW (M1 failed, so its key was rolled back)
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-0002
+Content-Type: application/json
+
+{ "amount": 21.00, "method": "CARD", "reference": "POS-7781" }
+
+> {%
+    client.test("M2 settles the invoice", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.headers.valueOf("Idempotent-Replayed") === "false", "replayed header");
+        client.assert(response.body.balanceAfter === 0, "balanceAfter " + response.body.balanceAfter);
+        client.assert(response.body.invoicePaid === true, "invoicePaid");
+        client.assert(response.body.reference === "POS-7781", "reference");
+    });
+%}
+
+### M3 the invoice is PAID now, automatically
+GET {{host}}/invoices/{{inv}}
+Authorization: Bearer {{owner}}
+
+> {%
+    client.test("M3 PAID", () => {
+        client.assert(response.body.status === "PAID", "status " + response.body.status);
+        client.assert(response.body.paidAt !== null, "paidAt");
+    });
+%}
+
+### M4 another payment for a PAID invoice  -> 409
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-0003
+Content-Type: application/json
+
+{ "amount": 1.00, "method": "CASH" }
+
+> {% client.test("M4 409", () => client.assert(response.status === 409, "status " + response.status)); %}
+
+### M5 K1 replayed AFTER the invoice was paid: the SAME answer as the first time (balance 21.00, not paid)
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-0001
+Content-Type: application/json
+
+{ "amount": 10.00, "method": "CASH" }
+
+> {%
+    client.test("M5 historic answer", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.headers.valueOf("Idempotent-Replayed") === "true", "replayed header");
+        client.assert(response.body.balanceAfter === 21, "balanceAfter " + response.body.balanceAfter);
+        client.assert(response.body.invoicePaid === false, "invoicePaid");
+    });
+%}
+
+### M6 the summary: 2 payments, 31.00 paid, 0.00 open
+GET {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{owner}}
+
+> {%
+    client.test("M6 summary", () => {
+        client.assert(response.body.status === "PAID", "status " + response.body.status);
+        client.assert(response.body.payments.length === 2, "payments " + response.body.payments.length);
+        client.assert(response.body.paid === 31, "paid " + response.body.paid);
+        client.assert(response.body.balance === 0, "balance " + response.body.balance);
+    });
+%}
+
+### M7 the temporary Day 20 endpoint is gone  -> 404
+POST {{host}}/invoices/{{inv}}/mark-paid
+Authorization: Bearer {{owner}}
+
+> {% client.test("M7 404", () => client.assert(response.status === 404, "status " + response.status)); %}
+
+
+### ---------------------------------------------------------- void with money received
+
+### V1 complete appointment 2 (Beard Trim)  -> draft 12.40
+PATCH {{host}}/appointments/2/status
+Authorization: Bearer {{owner}}
+Content-Type: application/json
+
+{ "status": "COMPLETED" }
+
+> {% client.test("V1 200", () => client.assert(response.status === 200, "status " + response.status)); %}
+
+### V2 find it
+GET {{host}}/invoices?appointmentId=2
+Authorization: Bearer {{owner}}
+
+> {% client.global.set("inv2", response.body.content[0].id); %}
+
+### V3 issue it
+POST {{host}}/invoices/{{inv2}}/issue
+Authorization: Bearer {{owner}}
+
+> {% client.test("V3 issued", () => client.assert(response.status === 200, "status " + response.status)); %}
+
+### V4 pay 5.00 of 12.40
+POST {{host}}/invoices/{{inv2}}/payments
+Authorization: Bearer {{owner}}
+Idempotency-Key: day22-key-0004
+Content-Type: application/json
+
+{ "amount": 5.00, "method": "CASH" }
+
+> {%
+    client.test("V4 partial", () => {
+        client.assert(response.status === 201, "status " + response.status);
+        client.assert(response.body.balanceAfter === 7.4, "balanceAfter " + response.body.balanceAfter);
+    });
+%}
+
+### V5 void an invoice that has received money  -> 409
+POST {{host}}/invoices/{{inv2}}/void
+Authorization: Bearer {{owner}}
+
+> {% client.test("V5 409", () => client.assert(response.status === 409, "status " + response.status)); %}
+
+
+### ---------------------------------------------------------- tenants and roles
+
+### T1 STAFF cannot record payments  -> 403
+POST {{host}}/invoices/{{inv2}}/payments
+Authorization: Bearer {{staff}}
+Idempotency-Key: day22-key-staff
+Content-Type: application/json
+
+{ "amount": 1.00, "method": "CASH" }
+
+> {% client.test("T1 403", () => client.assert(response.status === 403, "status " + response.status)); %}
+
+### T2 Gus pays tenant 1's invoice  -> 404 (not "forbidden": it does not exist for him)
+POST {{host}}/invoices/{{inv2}}/payments
+Authorization: Bearer {{gus}}
+Idempotency-Key: day22-key-gus1
+Content-Type: application/json
+
+{ "amount": 1.00, "method": "CASH" }
+
+> {% client.test("T2 404", () => client.assert(response.status === 404, "status " + response.status)); %}
+
+### T3 Gus lists tenant 1's payments  -> 404
+GET {{host}}/invoices/{{inv2}}/payments
+Authorization: Bearer {{gus}}
+
+> {% client.test("T3 404", () => client.assert(response.status === 404, "status " + response.status)); %}
+
+### T4 Gus uses Alice's key string on that invoice: keys are per business, so it is NOT a replay  -> still 404
+POST {{host}}/invoices/{{inv}}/payments
+Authorization: Bearer {{gus}}
+Idempotency-Key: day22-key-0001
+Content-Type: application/json
+
+{ "amount": 10.00, "method": "CASH" }
+
+> {% client.test("T4 404", () => client.assert(response.status === 404, "status " + response.status)); %}

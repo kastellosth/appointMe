@@ -71,12 +71,6 @@ public class InvoiceController {
         return service.issue(currentUser.tenantId(), id);
     }
 
-    /** Temporary until Day 22 (payments). */
-    @PostMapping("/{id}/mark-paid")
-    public InvoiceResponse markPaid(@PathVariable Long id) {
-        return service.markPaid(currentUser.tenantId(), id);
-    }
-
     @PostMapping("/{id}/void")
     public InvoiceResponse voidInvoice(@PathVariable Long id) {
         return service.voidInvoice(currentUser.tenantId(), id);

@@ -19,6 +19,7 @@ import com.kastellosth.appointme.repository.AppointmentRepository;
 import com.kastellosth.appointme.repository.CustomerRepository;
 import com.kastellosth.appointme.repository.InvoiceFilters;
 import com.kastellosth.appointme.repository.InvoiceRepository;
+import com.kastellosth.appointme.repository.PaymentRepository;
 import com.kastellosth.appointme.repository.TenantRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -49,15 +50,17 @@ public class InvoiceService {
     private final AppointmentRepository appointments;
     private final TenantRepository tenants;
     private final InvoiceNumberService numbers;
+    private final PaymentRepository payments;
 
     public InvoiceService(InvoiceRepository invoices, CustomerRepository customers,
                           AppointmentRepository appointments, TenantRepository tenants,
-                          InvoiceNumberService numbers) {
+                          InvoiceNumberService numbers, PaymentRepository payments) {
         this.invoices = invoices;
         this.customers = customers;
         this.appointments = appointments;
         this.tenants = tenants;
         this.numbers = numbers;
+        this.payments = payments;
     }
 
     // ------------------------------------------------------------- Day 21: automatic draft
@@ -165,17 +168,13 @@ public class InvoiceService {
         return InvoiceResponse.from(invoices.saveAndFlush(invoice));
     }
 
-    /** Temporary: on Day 22 a payment will do this. For now it lets us test the PAID state. */
-    @Transactional
-    public InvoiceResponse markPaid(Long tenantId, Long id) {
-        Invoice invoice = find(tenantId, id);
-        invoice.markPaid(Instant.now());
-        return InvoiceResponse.from(invoices.saveAndFlush(invoice));
-    }
-
     @Transactional
     public InvoiceResponse voidInvoice(Long tenantId, Long id) {
         Invoice invoice = find(tenantId, id);
+        // Day 22: money was received, so voiding would hide it. A refund must come first (not built yet).
+        if (payments.sumForInvoice(tenantId, id) != null) {
+            throw new ConflictException("An invoice that has received payments cannot be voided");
+        }
         invoice.voidInvoice();
         return InvoiceResponse.from(invoices.saveAndFlush(invoice));
     }

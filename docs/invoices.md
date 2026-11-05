@@ -25,8 +25,9 @@ DRAFT  --> ISSUED --> PAID
 | GET | `/invoices/{id}` | one invoice with its lines |
 | PUT | `/invoices/{id}/lines` | replace all lines (DRAFT only) |
 | POST | `/invoices/{id}/issue` | DRAFT → ISSUED, assigns the number |
-| POST | `/invoices/{id}/mark-paid` | ISSUED → PAID (temporary: payments replace it on Day 22) |
-| POST | `/invoices/{id}/void` | DRAFT/ISSUED → VOID |
+| POST | `/invoices/{id}/void` | DRAFT/ISSUED → VOID (not once money was received, Day 22) |
+
+ISSUED → PAID happens only through payments (Day 22, see `payments.md`).
 
 Every lookup is `findByIdAndTenantId` with the tenant from the token, so another business's
 invoice is 404, never 403.

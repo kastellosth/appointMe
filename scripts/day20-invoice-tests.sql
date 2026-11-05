@@ -73,7 +73,8 @@ DELETE FROM invoices WHERE id = 1;
 \echo '--- I19 ISSUED -> DRAFT                                         EXPECT ERROR illegal invoice status change'
 UPDATE invoices SET status = 'DRAFT' WHERE id = 1;
 
-\echo '--- I20 ISSUED -> PAID                                          EXPECT UPDATE 1'
+\echo '--- I20 ISSUED -> PAID (Day 22: needs payments = total first)  EXPECT INSERT 0 1 then UPDATE 1'
+INSERT INTO payments (tenant_id, invoice_id, amount, method, balance_after) VALUES (1, 1, 62.00, 'CASH', 0.00);
 UPDATE invoices SET status = 'PAID', paid_at = now() WHERE id = 1;
 
 \echo '--- I21 PAID -> VOID                                            EXPECT ERROR (PAID is final)'
