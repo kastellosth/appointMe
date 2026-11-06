@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.kastellosth.appointme.dto.CustomerRequest;
 import com.kastellosth.appointme.dto.CustomerResponse;
 import com.kastellosth.appointme.dto.PageResponse;
@@ -7,11 +8,13 @@ import com.kastellosth.appointme.security.CurrentUser;
 import com.kastellosth.appointme.service.CustomerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+@Tag(name = "5. Customers", description = "Customers of the current business.")
 @RestController
 @RequestMapping("/customers")
 @RequiredArgsConstructor
@@ -29,7 +32,7 @@ public class CustomerController {
     @GetMapping
     public PageResponse<CustomerResponse> list(
             @RequestParam(required = false) String name,
-            @PageableDefault(size = 20, sort = "fullName") Pageable pageable) {
+            @ParameterObject @PageableDefault(size = 20, sort = "fullName") Pageable pageable) {
         return service.list(currentUser.tenantId(), name, pageable);
     }
 

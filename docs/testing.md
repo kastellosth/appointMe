@@ -4,17 +4,18 @@ Each layer proves something the others can't.
 
 | Layer | Examples | Needs | What it proves | What it can't prove |
 |---|---|---|---|---|
-| Pure unit | `MoneyTest`, `InvoiceTest`, `RequestHashTest` | nothing | calculations and state machines | how parts work together |
+| Pure unit | `MoneyTest`, `InvoiceTest`, `InvoiceStatusTest`, `AvailabilityCalculatorTest`, `RequestHashTest` | nothing | calculations and state machines | how parts work together |
 | Mockito unit | `service/*Test` | nothing | a service's decisions: branches, order of calls, error mapping | SQL, locks, transactions, triggers |
 | Database | `MigrationsTest`, `ReminderJobTest`, `AuditTrailTest`, `Concurrent*Test` | Docker running (Testcontainers) | SQL, locks, constraints, races | the behaviour of a real client |
 | SQL scripts | `scripts/day*-tests.sql` | dev database (`appointme-db`) | the database refuses bad data even without Java | anything in Java |
-| HTTP | local `http/*.http` files, git-ignored | running app and dev database | status codes, JSON, security | internal details |
+| API | `ApiJourneyTest`, `TenantIsolationTest`, `RoleAccessTest`, `OpenApiEndpointTest` | Docker running (Testcontainers) | status codes, JSON and security as a real HTTP client sees them | internal details |
+| Deployed | `scripts/smoke-test.sh`, `scripts/day27-app-role-tests.sql` | a running production stack | the image, the settings and the database roles | anything it doesn't call |
 
 ## Commands
 
 ```bash
 ./mvnw test -Dtest="com/kastellosth/appointme/service/*Test"   # Mockito tests, no database
-./mvnw test                                                    # everything, needs Docker running, not appointme-db
+./mvnw verify                                                  # everything, needs Docker running, not appointme-db
 ```
 
 ## The test database
@@ -24,7 +25,7 @@ Database tests extend `DatabaseTestBase`. It starts one empty PostgreSQL 16 for 
 - **Dev data is safe.** Tests never connect to `appointme-db`.
 - **Migrations are tested from zero.** `MigrationsTest` checks that every migration file was applied.
 - **A test can't reach the dev database by accident.** `src/test/resources/application.properties` points at a port where nothing listens, so a test that forgets the base class fails with "Connection to localhost:1 refused".
-- **Tests share one database.** Each still creates its own business with `RaceTestData` and deletes it afterwards.
+- **Tests share one database.** Each creates its own business, so no test depends on another.
 
 ## What gets mocked
 

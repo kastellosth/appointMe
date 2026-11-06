@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.kastellosth.appointme.dto.TenantBillingRequest;
 import com.kastellosth.appointme.dto.TenantRequest;
 import com.kastellosth.appointme.dto.TenantResponse;
@@ -11,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+@Tag(name = "2. Business", description = "Create a business and manage its billing settings.")
 @RestController
 @RequestMapping("/tenants")
 @RequiredArgsConstructor

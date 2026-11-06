@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.kastellosth.appointme.dto.AvailabilityResponse;
 import com.kastellosth.appointme.entity.MembershipRole;
 import com.kastellosth.appointme.security.CurrentUser;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+@Tag(name = "6. Booking", description = "Free slots and appointments. Staff see only their own.")
 @RestController
 @RequestMapping("/availability")
 @PreAuthorize("hasAnyRole('OWNER','STAFF')")

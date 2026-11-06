@@ -1,4 +1,4 @@
-# Audit log (Day 23)
+# Audit log
 
 The audit log answers: **who did what, to which record, and when?** An invoice's `status` tells you
 that it is PAID. The audit log tells you who issued it, who took each payment, and in what order.
@@ -68,7 +68,7 @@ that. If many listeners ever need the same events, `BEFORE_COMMIT` is the natura
 ## Who is the actor?
 
 `CurrentUser.userIdOrNull()`: the user id from the JWT, or `null` when nobody is logged in on this
-thread. `null` means the system did it, for example a scheduled job (Day 24).
+thread. `null` means the system did it, for example a scheduled job.
 
 Staff can act too. If Bob completes an appointment, both the status change and the automatic draft
 invoice show Bob as the actor.
@@ -81,8 +81,7 @@ appointment notes or the payment `reference`, which is free text.
 The table is append-only, so nothing in it could be erased after a GDPR erasure request. If the log
 holds only ids, deleting the customer row makes those ids anonymous, and the history can stay.
 
-This needs discipline: the database cannot tell a name from any other text. It's checked by the
-`.http` tests C2 and E3.
+This needs discipline: the database cannot tell a name from any other text, so it depends on code review and tests.
 
 ## Why `entity_id` is not a foreign key
 
@@ -106,8 +105,8 @@ In Java: no setters, Hibernate `@Immutable`, and `entityType` comes from the act
 
 - **Not tamper-proof against a database superuser.** `TRUNCATE` fires no row triggers (the dev seed
   relies on that), and `session_replication_role = replica` switches triggers off (the tests' cleanup
-  uses that). In production the application should connect as a role that has only INSERT and SELECT
-  on this table. That fits Day 27. Real tamper-evidence would need hash-chained rows or shipping
+  uses that). In production the application connects as a role that has only INSERT and SELECT
+  on this table (see `deploy.md`). Real tamper-evidence would need hash-chained rows or shipping
   events to another system.
 - **Only committed changes are recorded.** Reads, failed logins and refused requests are not. Those
   belong in the application or security logs.
@@ -125,4 +124,3 @@ In Java: no setters, Hibernate `@Immutable`, and `entityType` comes from the act
 - `scripts/day23-audit-tests.sql`: the database rules, one by one. Rolled back at the end, so it leaves nothing behind.
 - `AuditTrailTest`: the same-transaction promise (rollback both ways, 20 × the same key, tenant isolation).
 - `AuditEventTest`: pure unit test, no database.
-- `http/day23-audit.http`: the whole flow over HTTP.

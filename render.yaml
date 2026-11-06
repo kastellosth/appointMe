@@ -1,0 +1,24 @@
+# The database is hosted elsewhere: Render's free database is deleted after about 44 days. See docs/deploy.md.
+services:
+  - type: web
+    name: appointme
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /actuator/health/readiness
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_USERNAME
+        value: appointme_app
+      - key: DATABASE_PASSWORD
+        sync: false
+      - key: FLYWAY_USERNAME
+        sync: false
+      - key: FLYWAY_PASSWORD
+        sync: false

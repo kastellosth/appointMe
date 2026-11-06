@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.kastellosth.appointme.dto.ServiceOfferingRequest;
 import com.kastellosth.appointme.dto.ServiceOfferingResponse;
 import com.kastellosth.appointme.security.CurrentUser;
@@ -12,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+@Tag(name = "4. Services", description = "What the business sells. Writing needs the OWNER role.")
 @RestController
 @RequestMapping("/services")
 @RequiredArgsConstructor

@@ -1,0 +1,18 @@
+# No defaults here on purpose: a missing value stops the application at startup.
+spring:
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+  flyway:
+    locations: classpath:db/migration,classpath:db/prod
+    user: ${FLYWAY_USERNAME}
+    password: ${FLYWAY_PASSWORD}
+
+# Behind an HTTPS proxy: Swagger's "Try it out" must call https://, not the http:// the app itself sees.
+server:
+  forward-headers-strategy: framework
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}

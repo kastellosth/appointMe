@@ -10,26 +10,25 @@
 	</parent>
 	<groupId>com.kastellosth</groupId>
 	<artifactId>appointMe</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
-	<url/>
+	<version>1.0.0</version>
+	<name>appointMe</name>
+	<description>Multi-tenant appointment scheduling and invoicing backend</description>
+	<url>https://github.com/kastellosth/appointMe</url>
 	<licenses>
-		<license/>
+		<license>
+			<name>MIT</name>
+			<url>https://opensource.org/license/mit</url>
+		</license>
 	</licenses>
-	<developers>
-		<developer/>
-	</developers>
-	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
-	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<springdoc.version>3.2.0</springdoc.version>
 	</properties>
 	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-jpa</artifactId>
@@ -53,6 +52,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-webmvc</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>${springdoc.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.flywaydb</groupId>
@@ -101,6 +105,7 @@
 	</dependencies>
 
 	<build>
+		<finalName>appointme</finalName>
 		<plugins>
 			<plugin>
 				<groupId>org.springframework.boot</groupId>

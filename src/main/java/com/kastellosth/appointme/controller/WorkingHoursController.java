@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.kastellosth.appointme.dto.WorkingHoursRequest;
 import com.kastellosth.appointme.dto.WorkingHoursResponse;
 import com.kastellosth.appointme.security.CurrentUser;
@@ -8,6 +9,7 @@ import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "3. Staff", description = "Team members of the current business.")
 @RestController
 @RequestMapping("/staff/{staffId}/working-hours")
 @PreAuthorize("hasRole('OWNER')")

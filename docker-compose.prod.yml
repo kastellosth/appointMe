@@ -1,0 +1,49 @@
+name: appointme-prod
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: appointme
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set it in the env file}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:?set it in the env file}
+      APP_PASSWORD: ${APP_PASSWORD:?set it in the env file}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/init-roles.sh:/docker-entrypoint-initdb.d/init-roles.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d appointme"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    image: appointme:local
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://db:5432/appointme
+      DATABASE_USERNAME: appointme_app
+      DATABASE_PASSWORD: ${APP_PASSWORD}
+      FLYWAY_USERNAME: appointme_owner
+      FLYWAY_PASSWORD: ${OWNER_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?set it in the env file}
+      APP_REMINDERS_DELAY: ${APP_REMINDERS_DELAY:-PT1M}
+    # 127.0.0.1: only a reverse proxy on this machine can reach it, because HTTPS ends at the proxy.
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  pgdata:

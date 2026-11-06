@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.kastellosth.appointme.dto.StaffRequest;
 import com.kastellosth.appointme.dto.StaffResponse;
 import com.kastellosth.appointme.security.CurrentUser;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+@Tag(name = "3. Staff", description = "Team members of the current business.")
 @RestController
 @RequestMapping("/staff")
 @RequiredArgsConstructor

@@ -51,7 +51,7 @@ detects the cycle, aborts one transaction with `40P01`, and the others continue.
 stored by the aborted transaction, so for the client it means the same thing as a conflict: the
 slot is not available.
 
-This showed up in the Day 19 tests as "UNEXPECTED" outcomes (a 500 over HTTP), until `40P01` was mapped.
+This showed up in the tests as "UNEXPECTED" outcomes (a 500 over HTTP), until `40P01` was mapped.
 
 ## Proof: the tests
 
@@ -70,10 +70,10 @@ threads would just queue for a connection and never really collide.
 
 ## Related
 
-- Payments (Day 22): the same request twice is stopped by an idempotency key (a unique constraint
+- Payments: the same request twice is stopped by an idempotency key (a unique constraint
   plus a replay). Two different payments at once are stopped by a row lock on the invoice
   (`SELECT … FOR NO KEY UPDATE`). See `payments.md`.
 
-- Invoices (Day 20) use the same idea for numbering: the counter row is updated inside the
+- Invoices use the same idea for numbering: the counter row is updated inside the
   issuing transaction, so the row lock serializes issuers (see `invoices.md`).
-- Two "complete" requests for one appointment: see `invoices.md`, Day 21.
+- Two "complete" requests for one appointment: see `invoices.md`.

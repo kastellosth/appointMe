@@ -34,3 +34,4 @@ build/
 lessons/
 *.http
 CLAUDE.md
+.env.prod

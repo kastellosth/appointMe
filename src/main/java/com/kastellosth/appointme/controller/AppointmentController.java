@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.kastellosth.appointme.dto.AppointmentRequest;
 import com.kastellosth.appointme.dto.AppointmentResponse;
 import com.kastellosth.appointme.dto.RescheduleRequest;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.util.List;
+@Tag(name = "6. Booking", description = "Free slots and appointments. Staff see only their own.")
 @RestController
 @RequestMapping("/appointments")
 @RequiredArgsConstructor

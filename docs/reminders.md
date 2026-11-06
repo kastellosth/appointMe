@@ -92,4 +92,3 @@ The unique key is `(appointment_id, appointment_starts_at)`, so a rescheduled ap
 
 - `scripts/day24-reminder-tests.sql`: the database rules. Rolled back at the end.
 - `ReminderJobTest`: exactly-once under 5 parallel runners, retries, crash recovery, skips, cleanup.
-- `http/day24-reminders.http`: the read API.

@@ -17,6 +17,10 @@ attack I tried against my own API.
 | Roles | `OWNER` / `STAFF` rules via `@PreAuthorize`; staff see only their own appointments | controllers, `AppointmentService` |
 | **Database** | Composite foreign keys `(tenant_id, customer_id)`, `(tenant_id, service_id)`, `(tenant_id, staff_id)` make it **impossible to store** a booking that points at another tenant's data, even if application code has a bug | `V2__tenant_consistency_constraints.sql` |
 
+## Automated tests
+
+`TenantIsolationTest` and `RoleAccessTest` repeat the API attacks on every build, against a real PostgreSQL. As a check, removing the tenant filter from the customer lookup made 4 of the 9 isolation tests fail.
+
 ## Attack log
 
 "Result" is what really happened when I ran it against my local instance
@@ -57,7 +61,7 @@ and no change in the database.
 | ATK-29 | SQL: insert booking with another tenant's service | rejected | composite FK | PASS: rejected by `fk_appointments_service_same_tenant` |
 | ATK-30 | SQL: insert booking with another tenant's staff | rejected | composite FK | PASS: rejected by `fk_appointments_staff_same_tenant` |
 | ATK-31 | SQL: update a valid booking to a foreign customer | rejected | composite FK | PASS: rejected by composite FK |
-| ROLE-01..11 | Staff attempting owner actions, reading colleagues' bookings, booking for others | 403 / 404 | `@PreAuthorize`, service scope | PASS: see `day13-roles.http` |
+| ROLE-01..11 | Staff attempting owner actions, reading colleagues' bookings, booking for others | 403 / 404 | `@PreAuthorize`, service scope | PASS: see `RoleAccessTest` |
 
 ## What this exercise showed
 
@@ -84,4 +88,4 @@ and no change in the database.
   product would send invitation emails instead.
 - **No rate limiting** on login or registration yet (stretch goal).
 - **No token revocation or refresh tokens** (stretch goal).
-- **Dev default JWT secret** exists for local convenience; deployment requires `JWT_SECRET` (Day 27).
+- **Dev default JWT secret** exists for local convenience; the `prod` profile has no default and requires `JWT_SECRET`.

@@ -1,5 +1,7 @@
 package com.kastellosth.appointme.controller;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.kastellosth.appointme.dto.InvoicePaymentsResponse;
 import com.kastellosth.appointme.dto.PaymentRequest;
 import com.kastellosth.appointme.dto.PaymentResponse;
@@ -11,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+@Tag(name = "8. Payments", description = "Requires an Idempotency-Key header. OWNER only.")
 @RestController
 @RequestMapping("/invoices/{invoiceId}/payments")
 @PreAuthorize("hasRole('OWNER')")
@@ -31,6 +34,7 @@ public class PaymentController {
      * The key format is checked in the service: @Pattern on this parameter next to @Valid would switch
      * Spring to method validation and lose the per-field "errors" map.
      */
+    @Operation(summary = "Record a payment", description = "Same key and same body: returns the first result, with Idempotent-Replayed: true. Same key and a different body: 422.")
     @PostMapping
     public ResponseEntity<PaymentResponse> record(@PathVariable Long invoiceId,
                                                   @RequestHeader(IDEMPOTENCY_KEY) String key,

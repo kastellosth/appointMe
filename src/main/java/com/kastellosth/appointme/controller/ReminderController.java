@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.kastellosth.appointme.dto.PageResponse;
 import com.kastellosth.appointme.dto.ReminderResponse;
 import com.kastellosth.appointme.entity.ReminderStatus;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Tag(name = "9. Audit and reminders", description = "Read-only history. OWNER only.")
 @RestController
 @RequestMapping("/reminders")
 @PreAuthorize("hasRole('OWNER')")

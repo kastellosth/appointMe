@@ -1,4 +1,4 @@
-# Payments and idempotency (Day 22)
+# Payments and idempotency
 
 ## Endpoints (owner only)
 
@@ -10,7 +10,7 @@
 - Only an **ISSUED** invoice takes payments. Partial payments are fine.
 - A payment can never be more than the open balance (409).
 - The payment that brings the balance to 0.00 marks the invoice **PAID** automatically, in the
-  same transaction. The temporary Day 20 `POST /invoices/{id}/mark-paid` is gone.
+  same transaction. The temporary `POST /invoices/{id}/mark-paid` is gone.
 - An invoice that has received money cannot be voided (409). That would need a refund first (not built).
 - Payments are **append-only**: no update and no delete, in Java (no setters) and in the database (trigger).
 
@@ -104,4 +104,4 @@ numbers, ids carry no legal meaning.
 - `scripts/day22-payment-tests.sql`: the database rules, one by one.
 - `ConcurrentPaymentTest`: 20 × the same key at once → 1 payment, 20 answers naming the same id.
   10 × full payment with different keys → 1 wins, 9 × 409, invoice PAID, 1 key stored.
-- `http/day22-payments.http`: the whole flow over HTTP, including the 422 and the historic replay.
+- `ApiJourneyTest`: the whole flow over HTTP, including the replay and the 422.

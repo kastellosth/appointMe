@@ -1,6 +1,6 @@
 # Invoices
 
-## Lifecycle (Day 20)
+## Lifecycle
 
 ```
 DRAFT  --> ISSUED --> PAID
@@ -25,9 +25,9 @@ DRAFT  --> ISSUED --> PAID
 | GET | `/invoices/{id}` | one invoice with its lines |
 | PUT | `/invoices/{id}/lines` | replace all lines (DRAFT only) |
 | POST | `/invoices/{id}/issue` | DRAFT → ISSUED, assigns the number |
-| POST | `/invoices/{id}/void` | DRAFT/ISSUED → VOID (not once money was received, Day 22) |
+| POST | `/invoices/{id}/void` | DRAFT/ISSUED → VOID (not once money was received) |
 
-ISSUED → PAID happens only through payments (Day 22, see `payments.md`).
+ISSUED → PAID happens only through payments (see `payments.md`).
 
 Every lookup is `findByIdAndTenantId` with the tenant from the token, so another business's
 invoice is 404, never 403.
@@ -75,7 +75,7 @@ The year is the year **at the business** (its time zone), not in UTC: an invoice
 The triggers raise SQLState `23514` (check violation), so Spring reports them as
 `DataIntegrityViolationException` → 409. Tests: `scripts/day20-invoice-tests.sql`.
 
-## Day 21: automatic drafts, billing settings, rounding
+## Automatic drafts, billing settings, rounding
 
 ### When an appointment becomes COMPLETED
 
@@ -131,10 +131,10 @@ Cost: the total tax can differ by a few cents from "rate × subtotal". Tax autho
 own rules about this. For a real business, check them with an accountant (in Greece, the myDATA
 rules). If the rule has to change, only `Money.taxOf` and the totals in `Invoice.recalculate` change.
 
-**Stored, not recalculated.** Each line stores its `tax_amount` (V6). On Day 20 the line tax was
+**Stored, not recalculated.** Each line stores its `tax_amount` (V6). Originally the line tax was
 recalculated every time it was read, so a change to the rounding code would have changed what
 old, issued invoices showed. Now an issued invoice shows exactly what was stored when it was made.
-V6 filled `tax_amount` for existing lines with the Day 20 rule (`round(line_total * tax_rate, 2)`).
+V6 filled `tax_amount` for existing lines with the original rule (`round(line_total * tax_rate, 2)`).
 For that one UPDATE it switched the "frozen lines" trigger off, inside the migration's transaction.
 
 Half-up: 0.005 → 0.01. Amounts are never negative here, so Java's `HALF_UP` and PostgreSQL's

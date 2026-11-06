@@ -1,5 +1,6 @@
 package com.kastellosth.appointme.controller;
 
+import io.swagger.v3.oas.annotations.tags.Tag;
 import com.kastellosth.appointme.dto.InvoiceLinesRequest;
 import com.kastellosth.appointme.dto.InvoiceRequest;
 import com.kastellosth.appointme.dto.InvoiceResponse;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 
+@Tag(name = "7. Invoices", description = "DRAFT to ISSUED to PAID, or VOID. OWNER only.")
 @RestController
 @RequestMapping("/invoices")
 @PreAuthorize("hasRole('OWNER')")
