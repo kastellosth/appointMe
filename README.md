@@ -4,6 +4,10 @@
 
 A multi-tenant appointment scheduling and invoicing REST API. Many small businesses (barbers, clinics, tutors) share one system, and each one's data stays isolated.
 
+**Live demo:** [API documentation (Swagger)](https://appointme-a6v9.onrender.com/swagger-ui.html). It runs on a free plan and sleeps when idle, so the first request can take a few minutes.
+
+To try it, log in as `demo-owner@example.com` / `demo-owner-pass`, or register your own user. The demo data is public, so don't enter anything real.
+
 ## What it does
 
 - **Booking:** weekly working hours, free slots in the business's own time zone, and bookings that can't overlap, even under concurrent requests.

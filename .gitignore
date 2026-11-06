@@ -35,3 +35,9 @@ lessons/
 *.http
 CLAUDE.md
 .env.prod
+
+# Neon: local connection details
+.env
+.env.local
+.neon
+.env.render
