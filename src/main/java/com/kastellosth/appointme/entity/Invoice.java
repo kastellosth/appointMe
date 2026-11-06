@@ -15,11 +15,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-/**
- * An invoice and its rules. There are deliberately NO setters:
- * the only ways to change it are the methods below, and each one checks the status first.
- * (The database repeats the same rules in triggers, in case this code ever has a bug.)
- */
 @Entity
 @Table(name = "invoices")
 @Getter
@@ -39,7 +34,6 @@ public class Invoice {
     @Column(name = "appointment_id", updatable = false)
     private Long appointmentId;
 
-    /** null while DRAFT; assigned when the invoice is issued. */
     @Column(length = 30)
     private String number;
 
@@ -78,8 +72,6 @@ public class Invoice {
     @OrderBy("lineNo")
     private List<InvoiceLine> lines = new ArrayList<>();
 
-    // ---------------------------------------------------------------- creating
-
     public static Invoice draft(Long tenantId, Long customerId, Long appointmentId, String currency) {
         Invoice invoice = new Invoice();
         invoice.tenantId = tenantId;
@@ -89,9 +81,6 @@ public class Invoice {
         return invoice;
     }
 
-    // ----------------------------------------------------------------- editing
-
-    /** Replaces ALL lines. Only a DRAFT may change. Numbers the lines 1..n and recalculates the totals. */
     public void replaceLines(List<InvoiceLine> newLines) {
         requireDraft("edited");
         lines.clear();
@@ -110,16 +99,11 @@ public class Invoice {
             sub = sub.add(line.getLineTotal());
             tax = tax.add(line.getTaxAmount());
         }
-        // Both sums are already in cents (line totals are exact, line taxes were rounded once),
-        // so setScale(2) only formats; it never rounds. See Money for the rounding strategy.
         this.subtotal = sub.setScale(Money.SCALE);
         this.taxTotal = tax.setScale(Money.SCALE);
         this.total = this.subtotal.add(this.taxTotal);
     }
 
-    // --------------------------------------------------------- the state machine
-
-    /** Throws if this invoice could not be issued right now. Call it BEFORE using up an invoice number. */
     public void checkIssuable() {
         requireTransition(InvoiceStatus.ISSUED);
         if (lines.isEmpty()) {
@@ -160,7 +144,6 @@ public class Invoice {
         }
     }
 
-    /** Read-only view: the only way to change lines is replaceLines(). */
     public List<InvoiceLine> getLines() {
         return Collections.unmodifiableList(lines);
     }

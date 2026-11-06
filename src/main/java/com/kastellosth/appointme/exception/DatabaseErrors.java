@@ -2,7 +2,6 @@ package com.kastellosth.appointme.exception;
 
 import java.sql.SQLException;
 
-
 public final class DatabaseErrors {
 
     public static final String SLOT_TAKEN_MESSAGE = "That time slot is already booked for this staff member";
@@ -24,7 +23,6 @@ public final class DatabaseErrors {
     public static boolean isDeadlock(Throwable error) {
         return hasSqlState(error, DEADLOCK_DETECTED);
     }
-
 
     private static boolean hasSqlState(Throwable error, String sqlState) {
         Throwable current = error;

@@ -35,7 +35,6 @@ public class AvailabilityController {
         return service.find(currentUser.tenantId(), staffScope(), staffId, serviceId, date, stepMinutes);
     }
 
-    // Same helper as in AppointmentController: null for owners, own membership id for staff
     private Long staffScope() {
         return currentUser.role() == MembershipRole.STAFF ? currentUser.membershipId() : null;
     }

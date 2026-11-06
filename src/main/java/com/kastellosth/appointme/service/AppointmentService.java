@@ -79,7 +79,6 @@ public class AppointmentService {
         a.setNotes(req.notes());
 
         Appointment saved = saveOrConflict(a);
-        // notes and the customer's name stay out of the log: they are personal data
         audit.record(tenantId, AuditAction.APPOINTMENT_CREATED, saved.getId(), "starts " + startsAt);
         return toResponse(saved);
     }
@@ -111,7 +110,6 @@ public class AppointmentService {
             throw new ConflictException(
                     "Cannot change status from " + a.getStatus() + " to " + target);
         }
-        // "It happened" / "they did not come" only makes sense once it has started.
         if ((target == AppointmentStatus.COMPLETED || target == AppointmentStatus.NO_SHOW)
                 && a.getStartsAt().isAfter(Instant.now())) {
             throw new ConflictException("An appointment that has not started yet cannot be marked " + target);
@@ -120,7 +118,6 @@ public class AppointmentService {
         a.setStatus(target);
         audit.record(tenantId, AuditAction.APPOINTMENT_STATUS_CHANGED, id, before + " -> " + target);
         if (target == AppointmentStatus.COMPLETED) {
-            // Same transaction: if the invoice cannot be created, the appointment stays SCHEDULED.
             invoiceService.createDraftForCompletedAppointment(a);
         }
         return toResponse(a);
@@ -149,7 +146,7 @@ public class AppointmentService {
         Tenant tenant = tenants.findById(tenantId)
                 .orElseThrow(() -> new NotFoundException("Tenant " + tenantId + " not found"));
 
-        Duration length = Duration.between(a.getStartsAt(), a.getEndsAt());   // keep what was booked
+        Duration length = Duration.between(a.getStartsAt(), a.getEndsAt());
         Instant newEnd = newStart.plus(length);
         requireBookable(tenant, tenantId, a.getStaff().getId(), newStart, newEnd);
 
@@ -160,7 +157,6 @@ public class AppointmentService {
         audit.record(tenantId, AuditAction.APPOINTMENT_RESCHEDULED, id, oldStart + " -> " + newStart);
         return toResponse(saved);
     }
-
 
     private void requireBookable(Tenant tenant, Long tenantId, Long staffId,
                                  Instant start, Instant end) {
@@ -176,10 +172,7 @@ public class AppointmentService {
         }
     }
 
-    /**
-     * saveAndFlush sends the SQL NOW, inside this try block, so a clash with another
-     * booking is thrown here and not later at commit, where we could not catch it.
-     */
+    /** saveAndFlush: a clash must surface here, not at commit, where it can't be caught. */
     private Appointment saveOrConflict(Appointment a) {
         try {
             return appointments.saveAndFlush(a);
@@ -188,8 +181,6 @@ public class AppointmentService {
                 throw new ConflictException(DatabaseErrors.SLOT_TAKEN_MESSAGE);
             }
             if (DatabaseErrors.isDeadlock(e)) {
-                // Two bookings collided head-on and the database picked this one to give up.
-                // Nothing was stored. For the client it is the same answer: not available, try again.
                 throw new ConflictException(DatabaseErrors.SLOT_CONTENDED_MESSAGE);
             }
             throw e;

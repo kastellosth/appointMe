@@ -50,13 +50,12 @@ public class SecurityConfig {
         return http.build();
     }
 
-    /** Turns the token's "role" claim into the authority ROLE_OWNER / ROLE_STAFF. */
     private JwtAuthenticationConverter roleConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
         converter.setJwtGrantedAuthoritiesConverter(jwt -> {
             String role = jwt.getClaimAsString("role");
             if (role == null) {
-                return List.of();   // a user token with no business selected has no authorities
+                return List.of();
             }
             return List.of(new SimpleGrantedAuthority("ROLE_" + role));
         });

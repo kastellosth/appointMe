@@ -29,10 +29,6 @@ import java.util.regex.Pattern;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * The same race, but through REAL HTTP: login, pick the business, then 30 parallel POST /appointments.
- * Expected: one 201 and twenty-nine 409.
- */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, properties = {
         "spring.datasource.hikari.maximum-pool-size=40",
         "spring.datasource.hikari.minimum-idle=2"
@@ -49,7 +45,7 @@ class ConcurrentBookingHttpTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
-    private final HttpClient http = HttpClient.newHttpClient();   // safe to share between threads
+    private final HttpClient http = HttpClient.newHttpClient();
     private World world;
 
     @BeforeEach
@@ -76,7 +72,7 @@ class ConcurrentBookingHttpTest {
             try {
                 return post("/appointments", tenantToken, body).statusCode();
             } catch (Exception e) {
-                return -1;                                    // network problem: shows up in the summary
+                return -1;
             }
         });
 

@@ -41,10 +41,6 @@ public class CurrentUser {
         return id.longValue();
     }
 
-    /**
-     * For the audit log: null = nobody is logged in here, so the system is doing this
-     * (a scheduled job, a test). Everything else uses userId(), which refuses an unknown caller.
-     */
     public Long userIdOrNull() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         return auth instanceof JwtAuthenticationToken token ? Long.valueOf(token.getToken().getSubject()) : null;

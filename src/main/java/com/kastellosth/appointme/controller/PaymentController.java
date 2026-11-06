@@ -28,12 +28,8 @@ public class PaymentController {
     }
 
     /**
-     * The header is REQUIRED: a missing header is 400 (Spring's MissingRequestHeaderException).
-     * Its format is checked in the service (BadRequestException), not with @Pattern here: a constraint
-     * on a plain parameter switches Spring to "method validation", and then @Valid body errors arrive as
-     * a different exception, without the per-field "errors" map our handler builds.
-     *
-     * A replay answers with the SAME status (201) and body as the first time, plus Idempotent-Replayed: true.
+     * The key format is checked in the service: @Pattern on this parameter next to @Valid would switch
+     * Spring to method validation and lose the per-field "errors" map.
      */
     @PostMapping
     public ResponseEntity<PaymentResponse> record(@PathVariable Long invoiceId,

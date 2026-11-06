@@ -17,17 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 
-/**
- * The audit log. record() is called directly by the services that change data.
- *
- * Why not @TransactionalEventListener(AFTER_COMMIT)? It runs after the commit, so a crash at that
- * moment gives a change WITHOUT history, and nothing can roll the change back any more. An audit
- * log with holes cannot be trusted. Here both are one transaction: both or neither.
- */
+/** Written in the caller's transaction, not AFTER_COMMIT: a crash there would leave a change with no history. */
 @Service
 public class AuditService {
 
-    /** Newest first; id breaks ties so paging is stable. Matches the indexes in V8. */
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("occurredAt"), Sort.Order.desc("id"));
 
     private final AuditEventRepository events;
@@ -38,27 +31,18 @@ public class AuditService {
         this.currentUser = currentUser;
     }
 
-    /**
-     * MANDATORY: refuses to run outside the caller's transaction, so an event can never be committed
-     * on its own. If this insert fails, the business change is rolled back as well.
-     *
-     * Details must never hold personal data (names, emails, free text typed by a user):
-     * this table cannot be edited or erased, so it could not honour a GDPR erasure request.
-     */
+    /** Details must never hold personal data: this table cannot be edited or erased. */
     @Transactional(propagation = Propagation.MANDATORY)
     public void record(Long tenantId, AuditAction action, Long entityId, String details) {
-        // plain save, not saveAndFlush: an IDENTITY id makes Hibernate run this INSERT right now,
-        // without also flushing the caller's other pending changes earlier than they planned.
+        // save, not saveAndFlush: the IDENTITY id runs this INSERT now, without flushing the caller's changes
         events.save(AuditEvent.of(tenantId, currentUser.userIdOrNull(), action, entityId, details, Instant.now()));
     }
 
-    /** Filters are optional; the tenant is not. Sorting is fixed: newest first. */
     @Transactional(readOnly = true)
     public PageResponse<AuditEventResponse> list(Long tenantId, AuditEntityType entityType, Long entityId,
                                                  AuditAction action, Long actorUserId,
                                                  Instant from, Instant to, int page, int size) {
         if (entityId != null && entityType == null) {
-            // ids are only unique per table: "entity 5" alone would mix invoice 5 and customer 5
             throw new BadRequestException("'entityId' needs 'entityType'");
         }
         if (from != null && to != null && !from.isBefore(to)) {

@@ -5,13 +5,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 
-/**
- * A fingerprint of a request: SHA-256 of its parts, as 64 hex characters.
- * Used to detect "same Idempotency-Key, DIFFERENT request", which must be refused, not replayed.
- *
- * The parts are joined with the ASCII "unit separator" (0x1F), a character that never appears in
- * normal input, so ("ab", "c") and ("a", "bc") give different hashes.
- */
+/** Parts are joined with 0x1F, which never appears in normal input, so ("ab", "c") and ("a", "bc") differ. */
 public final class RequestHash {
 
     private static final char SEPARATOR = '\u001F';
@@ -32,7 +26,7 @@ public final class RequestHash {
                     .digest(canonical.toString().getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);
         } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is always available in Java", e);   // cannot happen
+            throw new IllegalStateException("SHA-256 is always available in Java", e);
         }
     }
 }

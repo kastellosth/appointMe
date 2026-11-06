@@ -69,7 +69,8 @@ Known limits (fine for now):
 - Only successes are stored. A retried 409 is re-evaluated, which can give a different answer if
   the situation changed in between. Stripe-style APIs also store errors. That would need the
   response status and body in the table.
-- Keys are never deleted. A scheduled cleanup of keys older than, say, 24 h fits Day 24.
+- Keys are deleted after 7 days by a nightly job (see `reminders.md`). A retry after that counts as a new payment,
+  and only the balance check limits it.
 - The key table is payment-specific (`payment_id`). For more endpoints, store the response status
   and body instead.
 

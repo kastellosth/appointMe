@@ -5,7 +5,7 @@
 -- flyway_schema_history is NOT touched, so migrations stay applied.
 -- =====================================================================
 
-TRUNCATE audit_events, idempotency_keys, payments, invoice_lines, invoices, invoice_counters, working_hours, appointments, customers, services, memberships, users, tenants
+TRUNCATE reminders, audit_events, idempotency_keys, payments, invoice_lines, invoices, invoice_counters, working_hours, appointments, customers, services, memberships, users, tenants
     RESTART IDENTITY CASCADE;
 
 -- Tenants: id 1 and id 2   (tax rate and currency per business)

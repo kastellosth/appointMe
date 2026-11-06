@@ -41,10 +41,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * The promise of the audit log: a change and its history are one transaction.
- * Runs against the DEV database (Docker must be up), in its own throw-away businesses.
- */
 @SpringBootTest(properties = {
         "spring.datasource.hikari.maximum-pool-size=30",
         "spring.datasource.hikari.minimum-idle=2"
@@ -91,7 +87,6 @@ class AuditTrailTest {
         pay(id, "race-" + UUID.randomUUID(), "30.00");
         pay(id, "race-" + UUID.randomUUID(), "70.00");
 
-        // oldest first, to read it like a story
         assertEquals(List.of(AuditAction.INVOICE_CREATED, AuditAction.INVOICE_ISSUED,
                         AuditAction.PAYMENT_RECORDED, AuditAction.PAYMENT_RECORDED, AuditAction.INVOICE_PAID),
                 historyOf(world, AuditEntityType.INVOICE, id).stream().map(AuditEventResponse::action).toList().reversed());
@@ -125,7 +120,7 @@ class AuditTrailTest {
 
         tx.executeWithoutResult(status -> {
             invoices.voidInvoice(world.tenantId(), id);
-            status.setRollbackOnly();   // something later in this transaction went wrong
+            status.setRollbackOnly();
         });
 
         assertEquals("ISSUED", statusOf(id));
@@ -233,8 +228,6 @@ class AuditTrailTest {
 
         assertEquals(before, countEvents(world));
     }
-
-    // ----------------------------------------------------------------------------------- helpers
 
     private void logInAs(Long userId) {
         Jwt jwt = Jwt.withTokenValue("test").header("alg", "none").subject(String.valueOf(userId)).build();

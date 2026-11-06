@@ -49,7 +49,6 @@ public class AvailabilityService {
         this.appointments = appointments;
     }
 
-    /** staffScope is null for owners, or the staff member's own membership id. */
     @Transactional(readOnly = true)
     public AvailabilityResponse find(Long tenantId, Long staffScope, Long staffId,
                                      Long serviceId, LocalDate date, int stepMinutes) {
@@ -61,7 +60,6 @@ public class AvailabilityService {
             throw new ForbiddenException("Staff members can only view their own availability");
         }
 
-        // Everything is loaded WITH the caller's tenant: a foreign id behaves like a missing one.
         memberships.findByIdAndTenantId(staffId, tenantId)
                 .orElseThrow(() -> new NotFoundException("Staff member " + staffId + " not found"));
         ServiceOffering service = services.findByIdAndTenantId(serviceId, tenantId)
@@ -73,14 +71,12 @@ public class AvailabilityService {
                 .orElseThrow(() -> new NotFoundException("Tenant " + tenantId + " not found"));
         ZoneId zone = ZoneId.of(tenant.getTimezone());
 
-        // The staff member's wall-clock intervals for that weekday (1 = Monday ... 7 = Sunday)
         int weekday = date.getDayOfWeek().getValue();
         List<LocalWindow> windows = workingHours.findByTenantIdAndStaffId(tenantId, staffId).stream()
                 .filter(w -> w.getDayOfWeek() == weekday)
                 .map(w -> new LocalWindow(w.getStartTime(), w.getEndTime()))
                 .toList();
 
-        // Busy periods only matter on a day the person works at all
         List<Range> busy = List.of();
         if (!windows.isEmpty()) {
             Instant dayStart = date.atStartOfDay(zone).toInstant();

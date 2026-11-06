@@ -36,7 +36,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Conflict", ex.getMessage());
     }
 
-    // An Idempotency-Key reused for a different request
     @ExceptionHandler(UnprocessableException.class)
     public ProblemDetail handleUnprocessable(UnprocessableException ex) {
         return problem(HttpStatus.valueOf(422), "Unprocessable", ex.getMessage());
@@ -49,7 +48,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ProblemDetail handleDataIntegrity(DataIntegrityViolationException ex) {
-        // Safety net: if a clash surfaces outside the service's try/catch (for instance at commit)
         if (DatabaseErrors.isExclusionViolation(ex)) {
             return problem(HttpStatus.CONFLICT, "Conflict", DatabaseErrors.SLOT_TAKEN_MESSAGE);
         }
@@ -57,7 +55,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.CONFLICT, "Conflict", "The request conflicts with existing data");
     }
 
-    // Anything unexpected: log everything, tell the client nothing
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpected(Exception ex) {
         log.error("Unexpected error", ex);
@@ -65,7 +62,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 "Something went wrong on our side");
     }
 
-    // Bean Validation failures (@Valid) -> 400 with a per-field list
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
             MethodArgumentNotValidException ex, HttpHeaders headers,
@@ -103,7 +99,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, "Forbidden",
                 "You do not have permission to perform this action");
     }
-    // @Version at work: two people edited the same row at the same moment
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ProblemDetail handleOptimisticLock(ObjectOptimisticLockingFailureException ex) {
         return problem(HttpStatus.CONFLICT, "Conflict",

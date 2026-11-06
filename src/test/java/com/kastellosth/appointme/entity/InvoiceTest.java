@@ -12,10 +12,6 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/**
- * The invoice rules without Spring or a database: totals, the rounding strategy, the state machine.
- * Lives in the same package as Invoice so it sees exactly what other code sees.
- */
 class InvoiceTest {
 
     private static final BigDecimal VAT = new BigDecimal("0.24");
@@ -48,7 +44,6 @@ class InvoiceTest {
         assertEquals(d("43.40"), invoice.getTotal());
     }
 
-    /** The case where the two strategies differ: see docs/invoices.md, "Rounding". */
     @Test
     void taxIsRoundedPerLineNotPerInvoice() {
         Invoice invoice = draftWith(
@@ -58,7 +53,6 @@ class InvoiceTest {
         // per line: 0.024 -> 0.02, three times = 0.06.  (Per invoice it would be 0.072 -> 0.07.)
         assertEquals(d("0.06"), invoice.getTaxTotal());
         assertEquals(d("0.36"), invoice.getTotal());
-        // and the printed lines add up to the printed total:
         BigDecimal sumOfLineTaxes = invoice.getLines().stream()
                 .map(InvoiceLine::getTaxAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
         assertEquals(invoice.getTaxTotal(), sumOfLineTaxes);

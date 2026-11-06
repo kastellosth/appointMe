@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
 
-/** Read-only on purpose: there is no way to create, change or delete an event over HTTP. */
 @RestController
 @RequestMapping("/audit-events")
 @PreAuthorize("hasRole('OWNER')")
@@ -31,7 +30,6 @@ public class AuditEventController {
         this.currentUser = currentUser;
     }
 
-    /** Example, the whole story of one invoice: GET /audit-events?entityType=INVOICE&entityId=5 */
     @GetMapping
     public PageResponse<AuditEventResponse> list(
             @RequestParam(required = false) AuditEntityType entityType,

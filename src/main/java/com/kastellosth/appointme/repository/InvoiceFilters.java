@@ -9,14 +9,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Builds the WHERE clause of GET /invoices. Only the filters that were given are added.
- * The tenant filter is NOT optional: it is the first argument and always applied.
- *
- * Why not one JPQL query with "(:status IS NULL OR i.status = :status)"? PostgreSQL often
- * cannot tell the type of a NULL parameter ("could not determine data type of parameter $1"),
- * and the query planner cannot use indexes well for that pattern.
- */
+/** Not "(:status IS NULL OR ...)" in JPQL: PostgreSQL often cannot determine the type of a NULL parameter. */
 public final class InvoiceFilters {
 
     private InvoiceFilters() {
@@ -36,7 +29,6 @@ public final class InvoiceFilters {
             if (appointmentId != null) {
                 where.add(cb.equal(root.get("appointmentId"), appointmentId));
             }
-            // half-open [from, to), like every other time range in this project
             if (createdFrom != null) {
                 where.add(cb.greaterThanOrEqualTo(root.<Instant>get("createdAt"), createdFrom));
             }

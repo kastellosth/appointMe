@@ -20,5 +20,4 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     boolean existsByTenantIdAndEmail(Long tenantId, String email);
 
-
 }

@@ -10,7 +10,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Builds the WHERE clause of GET /audit-events. The tenant filter is NOT optional. See InvoiceFilters. */
 public final class AuditFilters {
 
     private AuditFilters() {
@@ -33,7 +32,6 @@ public final class AuditFilters {
             if (actorUserId != null) {
                 where.add(cb.equal(root.get("actorUserId"), actorUserId));
             }
-            // half-open [from, to), like every other time range in this project
             if (from != null) {
                 where.add(cb.greaterThanOrEqualTo(root.<Instant>get("occurredAt"), from));
             }

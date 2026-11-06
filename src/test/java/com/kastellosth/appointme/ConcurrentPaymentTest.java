@@ -23,12 +23,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/**
- * Two races, two defences:
- *   A) the SAME payment sent 20 times at once (same Idempotency-Key)  -> exactly 1 payment, 20 identical answers
- *   B) 10 DIFFERENT full payments for one invoice at once              -> exactly 1 wins, the rest 409, never overpaid
- * Runs against the DEV database (Docker must be up), in its own throw-away business.
- */
 @SpringBootTest(properties = {
         "spring.datasource.hikari.maximum-pool-size=30",
         "spring.datasource.hikari.minimum-idle=2"
@@ -50,7 +44,6 @@ class ConcurrentPaymentTest {
     @BeforeEach
     void createIssuedInvoice() {
         world = RaceTestData.create(jdbc, passwordEncoder);
-        // An ISSUED invoice of 100.00, inserted directly (the invoice triggers only guard UPDATE and DELETE)
         invoiceId = jdbc.queryForObject("""
                 INSERT INTO invoices (tenant_id, customer_id, number, status, subtotal, tax_total, total, issued_at)
                 VALUES (?, ?, 'RACE-1', 'ISSUED', 100.00, 0.00, 100.00, now()) RETURNING id
@@ -82,13 +75,11 @@ class ConcurrentPaymentTest {
         assertEquals(19L, outcomes.stream().filter(o -> o.startsWith("REPLAYED ")).count(), "19 REPLAYED. " + summary);
         assertEquals(1L, outcomes.stream().map(o -> o.substring(o.indexOf(' ') + 1)).distinct().count(),
                 "all 20 answers must name the same payment id. " + summary);
-        // the decisive check: the database
         assertEquals(1, count("SELECT count(*) FROM payments WHERE invoice_id = ?"));
     }
 
     @Test
     void differentPaymentsCannotOverpay() throws Exception {
-        // each request pays the FULL total, with its own key: only one may succeed
         List<String> outcomes = ParallelRunner.runAtOnce(10, () -> {
             try {
                 paymentService.record(world.tenantId(), invoiceId, "race-" + UUID.randomUUID(),
@@ -107,7 +98,6 @@ class ConcurrentPaymentTest {
         assertEquals(9L, outcomes.stream().filter("CONFLICT"::equals).count(), "nine CONFLICT. " + summary);
         assertEquals(1, count("SELECT count(*) FROM payments WHERE invoice_id = ?"));
         assertEquals("PAID", jdbc.queryForObject("SELECT status FROM invoices WHERE id = ?", String.class, invoiceId));
-        // failed requests rolled back their keys too: only the winner's key is stored
         assertEquals(1, count("SELECT count(*) FROM idempotency_keys k JOIN payments p ON p.id = k.payment_id "
                 + "WHERE p.invoice_id = ?"));
     }

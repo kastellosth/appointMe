@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-
 public final class AvailabilityCalculator {
 
     private AvailabilityCalculator() {
@@ -25,16 +24,6 @@ public final class AvailabilityCalculator {
         }
     }
 
-    /**
-     * @param date      the calendar day in the TENANT's zone
-     * @param zone      the tenant's time zone
-     * @param working   the staff member's wall-clock intervals for that weekday
-     * @param busy      existing (non-cancelled) appointments as real ranges
-     * @param duration  how long the service takes
-     * @param step      distance between candidate start times
-     * @param notBefore slots starting before this moment are dropped (normally "now")
-     * @return free slots in chronological order, each exactly {@code duration} long
-     */
     public static List<Range> freeSlots(LocalDate date, ZoneId zone,
                                         List<LocalWindow> working, List<Range> busy,
                                         Duration duration, Duration step, Instant notBefore) {

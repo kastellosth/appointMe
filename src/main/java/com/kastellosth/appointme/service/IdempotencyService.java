@@ -6,28 +6,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
-/**
- * Idempotency keys: "do this at most once, however many times the client sends it".
- *
- * How (see docs/payments.md):
- *   claim()    INSERT the key at the START of the caller's transaction, ON CONFLICT DO NOTHING.
- *              - 1 row inserted: the key is ours, do the work.
- *              - 0 rows: the key exists, so return what it holds (the caller replays it).
- *              If another request with the same key is still running, the INSERT WAITS on the
- *              primary key until that transaction ends, so the two can never both do the work.
- *   complete() store the result in the same transaction, just before commit.
- * If the work fails, the transaction rolls back, the key row with it, and the client can retry.
- *
- * Plain SQL (JdbcTemplate) because ON CONFLICT is the whole point, and JPA cannot express it.
- * It shares the JPA transaction and connection, like InvoiceNumberService.
- */
 @Service
 public class IdempotencyService {
 
-    /** UUIDs and similar: letters, digits, '-' and '_', 8 to 100 characters. */
     private static final Pattern VALID_KEY = Pattern.compile("[A-Za-z0-9_-]{8,100}");
 
     public record StoredKey(String operation, String requestHash, Long paymentId) {
@@ -71,5 +57,19 @@ public class IdempotencyService {
     public void complete(long tenantId, String key, long paymentId) {
         jdbc.update("UPDATE idempotency_keys SET payment_id = ? WHERE tenant_id = ? AND key = ?",
                 paymentId, tenantId, key);
+    }
+
+    @Transactional
+    public int deleteOlderThan(Instant cutoff, int limit) {
+        return jdbc.update("""
+                WITH picked AS MATERIALIZED (
+                    SELECT tenant_id, key FROM idempotency_keys
+                     WHERE created_at < ?
+                     LIMIT ?
+                       FOR UPDATE SKIP LOCKED)
+                DELETE FROM idempotency_keys k
+                 USING picked
+                 WHERE k.tenant_id = picked.tenant_id AND k.key = picked.key
+                """, Timestamp.from(cutoff), limit);
     }
 }

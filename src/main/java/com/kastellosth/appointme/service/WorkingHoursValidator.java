@@ -14,7 +14,6 @@ public final class WorkingHoursValidator {
     }
 
     public static void validate(List<ScheduleInterval> intervals) {
-        // 1) every interval must end after it starts
         for (ScheduleInterval i : intervals) {
             if (!i.end().isAfter(i.start())) {
                 throw new BadRequestException(i.dayOfWeek() + ": end time " + i.end()
@@ -22,8 +21,6 @@ public final class WorkingHoursValidator {
             }
         }
 
-        // 2) no overlaps within a day: sort by day then start, and compare each
-        //    start with the latest end seen so far on that day
         List<ScheduleInterval> sorted = intervals.stream()
                 .sorted(Comparator.comparing(ScheduleInterval::dayOfWeek)
                         .thenComparing(ScheduleInterval::start))

@@ -1,6 +1,5 @@
 package com.kastellosth.appointme.repository;
 
-
 import com.kastellosth.appointme.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 

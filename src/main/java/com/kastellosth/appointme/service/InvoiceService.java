@@ -34,16 +34,11 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-/**
- * Every method takes the tenant id from the TOKEN (the controller passes it in) and every lookup
- * uses it, so an invoice of another business is simply "not found" (404), never "forbidden".
- */
 @Service
 public class InvoiceService {
 
     private static final Duration PAYMENT_TERM = Duration.ofDays(14);
     private static final DateTimeFormatter LINE_DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-    /** Newest first; id breaks ties so paging is stable (no row shows up on two pages). */
     private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
 
     private final InvoiceRepository invoices;
@@ -66,19 +61,7 @@ public class InvoiceService {
         this.audit = audit;
     }
 
-    // ------------------------------------------------------------- automatic draft
-
-    /**
-     * Called by AppointmentService when an appointment becomes COMPLETED.
-     *
-     * MANDATORY: it must run INSIDE the transaction that completes the appointment. Either both
-     * happen (appointment COMPLETED + draft invoice) or neither does.
-     *
-     * Copies the service price NOW. Later price changes do not touch this invoice.
-     * If the appointment already has a live invoice (the owner created one by hand), nothing happens.
-     *
-     * @return the new draft, or null if the appointment was already invoiced
-     */
+    /** @return the new draft, or null if the appointment already has a live invoice */
     @Transactional(propagation = Propagation.MANDATORY)
     public Invoice createDraftForCompletedAppointment(Appointment appointment) {
         if (appointment.getStatus() != AppointmentStatus.COMPLETED) {
@@ -98,15 +81,11 @@ public class InvoiceService {
                 tenant.getCurrency());
         invoice.replaceLines(List.of(InvoiceLine.of(
                 service.getName() + " (" + when + ")", 1, service.getPrice(), tenant.getTaxRate())));
-        // saveAndFlush: if the database refuses (for example a second live invoice created at the
-        // same moment, uq_invoices_one_live_per_appointment), we find out here, before commit.
         Invoice saved = invoices.saveAndFlush(invoice);
         audit.record(tenantId, AuditAction.INVOICE_CREATED, saved.getId(),
                 "automatic draft for appointment " + appointment.getId() + ", total " + saved.getTotal());
         return saved;
     }
-
-    // ------------------------------------------------------------- by hand
 
     @Transactional
     public InvoiceResponse create(Long tenantId, InvoiceRequest request) {
@@ -126,7 +105,6 @@ public class InvoiceService {
             }
         }
 
-        // Defaults come from the business, not from a constant
         String currency = request.currency() == null ? tenant.getCurrency() : request.currency();
         Invoice invoice = Invoice.draft(tenantId, request.customerId(), request.appointmentId(), currency);
         invoice.replaceLines(toLines(request.lines(), tenant));
@@ -140,7 +118,6 @@ public class InvoiceService {
         return InvoiceResponse.from(find(tenantId, id));
     }
 
-    /** Filters are optional; the tenant is not. Sorting is fixed: newest first. */
     @Transactional(readOnly = true)
     public PageResponse<InvoiceSummaryResponse> list(Long tenantId, InvoiceStatus status, Long customerId,
                                                      Long appointmentId, Instant createdFrom, Instant createdTo,
@@ -166,15 +143,13 @@ public class InvoiceService {
     @Transactional
     public InvoiceResponse issue(Long tenantId, Long id) {
         Invoice invoice = find(tenantId, id);
-        // 1) Check first, so a refused request never uses up a number.
+        // Check first, so a refused request never uses up a number.
         invoice.checkIssuable();
 
-        // 2) The invoice year is the year at the BUSINESS, not in UTC.
         Tenant tenant = tenant(tenantId);
         Instant now = Instant.now();
         int year = now.atZone(ZoneId.of(tenant.getTimezone())).getYear();
 
-        // 3) Take the number INSIDE this transaction: if anything below fails, the number is given back.
         invoice.issue(numbers.next(tenantId, year), now, PAYMENT_TERM);
         Invoice saved = invoices.saveAndFlush(invoice);
         audit.record(tenantId, AuditAction.INVOICE_ISSUED, id, "number " + saved.getNumber() + ", total " + saved.getTotal());
@@ -184,7 +159,6 @@ public class InvoiceService {
     @Transactional
     public InvoiceResponse voidInvoice(Long tenantId, Long id) {
         Invoice invoice = find(tenantId, id);
-        // Money was received, so voiding would hide it. A refund must come first (not built yet).
         if (payments.sumForInvoice(tenantId, id) != null) {
             throw new ConflictException("An invoice that has received payments cannot be voided");
         }
@@ -205,7 +179,6 @@ public class InvoiceService {
                 .orElseThrow(() -> new NotFoundException("Tenant " + tenantId + " not found"));
     }
 
-    /** A line without a tax rate gets the business's rate. */
     private List<InvoiceLine> toLines(List<InvoiceLineRequest> requests, Tenant tenant) {
         if (requests == null) {
             return List.of();

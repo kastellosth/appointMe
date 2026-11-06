@@ -6,10 +6,7 @@ import com.kastellosth.appointme.entity.PaymentMethod;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-/**
- * Built ONLY from the stored payment row, so a replay (same Idempotency-Key) returns
- * exactly the same body as the first response, even if more payments came in since.
- */
+/** Built only from the stored row, so a replay returns exactly the first response. */
 public record PaymentResponse(
         Long id,
         Long invoiceId,

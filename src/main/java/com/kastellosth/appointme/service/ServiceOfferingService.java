@@ -45,7 +45,7 @@ public class ServiceOfferingService {
     public ServiceOfferingResponse update(Long tenantId, Long id, ServiceOfferingRequest req) {
         ServiceOffering s = find(tenantId, id);
         apply(s, req);
-        return toResponse(s);   // changes are saved automatically at commit
+        return toResponse(s);
     }
 
     @Transactional

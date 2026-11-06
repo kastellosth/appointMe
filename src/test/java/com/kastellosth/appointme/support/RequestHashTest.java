@@ -15,15 +15,14 @@ class RequestHashTest {
     @Test
     void anyDifferenceChangesTheHash() {
         String base = RequestHash.of("7", "10", "CASH", null);
-        assertNotEquals(base, RequestHash.of("8", "10", "CASH", null));      // other invoice
-        assertNotEquals(base, RequestHash.of("7", "11", "CASH", null));      // other amount
-        assertNotEquals(base, RequestHash.of("7", "10", "CARD", null));      // other method
-        assertNotEquals(base, RequestHash.of("7", "10", "CASH", "POS-1"));   // other reference
+        assertNotEquals(base, RequestHash.of("8", "10", "CASH", null));
+        assertNotEquals(base, RequestHash.of("7", "11", "CASH", null));
+        assertNotEquals(base, RequestHash.of("7", "10", "CARD", null));
+        assertNotEquals(base, RequestHash.of("7", "10", "CASH", "POS-1"));
     }
 
     @Test
     void partsCannotBeShiftedIntoEachOther() {
-        // without a separator both would be the string "abc"
         assertNotEquals(RequestHash.of("ab", "c"), RequestHash.of("a", "bc"));
     }
 

@@ -9,13 +9,7 @@ import org.hibernate.annotations.Immutable;
 import java.time.Instant;
 import java.util.Objects;
 
-/**
- * One line of history. Append-only: no setters, @Immutable for Hibernate, and the database refuses
- * UPDATE and DELETE (trg_audit_events_append_only).
- *
- * entityId is a plain number, not a relation: the event must survive when the record it talks
- * about is deleted, for example a customer.
- */
+/** entityId is not a relation: the event must outlive the record it talks about. */
 @Entity
 @Immutable
 @Table(name = "audit_events")
@@ -57,7 +51,7 @@ public class AuditEvent {
         e.tenantId = Objects.requireNonNull(tenantId, "tenantId");
         e.actorUserId = actorUserId;
         e.action = Objects.requireNonNull(action, "action");
-        e.entityType = action.entityType();   // comes from the action, so the two cannot disagree
+        e.entityType = action.entityType();
         e.entityId = Objects.requireNonNull(entityId, "entityId");
         e.details = details;
         e.occurredAt = Objects.requireNonNull(occurredAt, "occurredAt");

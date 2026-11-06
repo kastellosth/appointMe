@@ -32,11 +32,10 @@ public class WorkingHoursService {
         return toResponse(staffId, workingHours.findByTenantIdAndStaffId(tenantId, staffId));
     }
 
-    /** Replaces the WHOLE week. All or nothing: if validation fails, nothing is deleted. */
     @Transactional
     public WorkingHoursResponse replace(Long tenantId, Long staffId, WorkingHoursRequest request) {
         requireStaffInTenant(tenantId, staffId);
-        WorkingHoursValidator.validate(request.intervals());   // before touching the data
+        WorkingHoursValidator.validate(request.intervals());
 
         workingHours.deleteSchedule(tenantId, staffId);
 
@@ -44,7 +43,7 @@ public class WorkingHoursService {
             WorkingHours row = new WorkingHours();
             row.setTenantId(tenantId);
             row.setStaffId(staffId);
-            row.setDayOfWeek(i.dayOfWeek().getValue());   // MONDAY -> 1 ... SUNDAY -> 7
+            row.setDayOfWeek(i.dayOfWeek().getValue());
             row.setStartTime(i.start());
             row.setEndTime(i.end());
             return row;
@@ -53,8 +52,6 @@ public class WorkingHoursService {
         return toResponse(staffId, workingHours.saveAll(rows));
     }
 
-    // A membership of another tenant looks exactly like one that does not exist (404),
-    // the same rule as every other tenant-owned record.
     private void requireStaffInTenant(Long tenantId, Long staffId) {
         if (!memberships.existsByIdAndTenantId(staffId, tenantId)) {
             throw new NotFoundException("Staff member " + staffId + " not found");

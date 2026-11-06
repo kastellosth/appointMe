@@ -30,7 +30,6 @@ public class TenantController {
         return tenantService.getById(currentUser.tenantId());
     }
 
-    /** Tax rate and currency of the business in the token. Owner only. */
     @PutMapping("/current/billing")
     @PreAuthorize("hasRole('OWNER')")
     public TenantResponse updateBilling(@Valid @RequestBody TenantBillingRequest request) {

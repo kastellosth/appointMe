@@ -8,11 +8,6 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-/**
- * Money received for an invoice. Append-only: no setters, and the database refuses
- * UPDATE and DELETE (trg_payments_append_only). A mistake is corrected with a new record
- * (a refund, later), never by editing history.
- */
 @Entity
 @Table(name = "payments")
 @Getter
@@ -39,7 +34,6 @@ public class Payment {
     @Column(length = 100, updatable = false)
     private String reference;
 
-    /** What was still owed after this payment. 0.00 means this payment settled the invoice. */
     @Column(name = "balance_after", nullable = false, updatable = false, precision = 12, scale = 2)
     private BigDecimal balanceAfter;
 

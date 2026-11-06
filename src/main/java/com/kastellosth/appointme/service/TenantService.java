@@ -72,7 +72,6 @@ public class TenantService {
         return toResponse(tenant);
     }
 
-    /** The owner sets the tax rate and currency. Only NEW invoice lines use them. */
     @Transactional
     public TenantResponse updateBilling(Long tenantId, TenantBillingRequest request) {
         Tenant tenant = tenantRepository.findById(tenantId)

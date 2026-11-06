@@ -8,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** Pure unit test, no database. */
 class AuditEventTest {
 
     private static final Instant NOW = Instant.parse("2026-11-05T10:00:00Z");
@@ -17,7 +16,6 @@ class AuditEventTest {
     void entityTypeComesFromTheAction() {
         assertEquals(AuditEntityType.CUSTOMER,
                 AuditEvent.of(1L, 1L, AuditAction.CUSTOMER_DELETED, 5L, null, NOW).getEntityType());
-        // a payment is part of the invoice's story
         assertEquals(AuditEntityType.INVOICE,
                 AuditEvent.of(1L, 1L, AuditAction.PAYMENT_RECORDED, 5L, null, NOW).getEntityType());
     }

@@ -5,16 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * Hands out invoice numbers: INV-2026-0001, INV-2026-0002, ... one sequence per tenant and year.
- *
- * Why not a normal database SEQUENCE? A sequence never gives a number back. If a transaction
- * takes number 7 and then fails, 7 is lost forever and the legal series has a hole.
- * Here the counter is an ordinary row updated INSIDE the caller's transaction, so:
- *   - the update locks the row until commit, so two transactions can never get the same number;
- *   - if the transaction rolls back, the counter rolls back with it, so no number is lost.
- * The price: issuing invoices for one tenant is serialized (only one at a time) - fine for invoicing.
- */
+/** Not a SEQUENCE: a sequence never gives a number back, so a rollback would leave a hole in the legal series. */
 @Service
 public class InvoiceNumberService {
 
@@ -32,7 +23,6 @@ public class InvoiceNumberService {
         this.jdbc = jdbc;
     }
 
-    /** MANDATORY: it must run inside the transaction that saves the invoice, never on its own. */
     @Transactional(propagation = Propagation.MANDATORY)
     public String next(long tenantId, int year) {
         Integer n = jdbc.queryForObject(NEXT_NUMBER, Integer.class, tenantId, year);

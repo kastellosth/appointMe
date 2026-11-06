@@ -6,11 +6,6 @@ import com.kastellosth.appointme.entity.InvoiceStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 
-/**
- * One row of GET /invoices. No lines on purpose: listing 20 invoices must not load
- * every line of every invoice (that would be one extra query per invoice, the "N+1" problem).
- * Use GET /invoices/{id} for the full invoice.
- */
 public record InvoiceSummaryResponse(
         Long id,
         Long customerId,

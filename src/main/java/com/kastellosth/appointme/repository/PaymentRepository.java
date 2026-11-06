@@ -15,7 +15,7 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     List<Payment> findByTenantIdAndInvoiceIdOrderByIdAsc(Long tenantId, Long invoiceId);
 
-    /** null when there are no payments yet (SQL sum of no rows is NULL): the service turns it into 0. */
+    /** null when there are no payments yet. */
     @Query("select sum(p.amount) from Payment p where p.tenantId = :tenantId and p.invoiceId = :invoiceId")
     BigDecimal sumForInvoice(@Param("tenantId") Long tenantId, @Param("invoiceId") Long invoiceId);
 }

@@ -66,7 +66,5 @@ public class AppointmentController {
         return service.reschedule(currentUser.tenantId(), staffScope(), id, req.startsAt());
     }
 
-
-
 }
 

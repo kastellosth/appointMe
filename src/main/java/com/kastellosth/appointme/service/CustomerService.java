@@ -32,7 +32,6 @@ public class CustomerService {
         c.setTenant(tenant);
         apply(c, req, tenantId);
         Customer saved = repository.save(c);
-        // ids only: a customer's name or email must not end up in a table that cannot be erased
         audit.record(tenantId, AuditAction.CUSTOMER_CREATED, saved.getId(), null);
         return toResponse(saved);
     }
@@ -62,7 +61,6 @@ public class CustomerService {
     @Transactional
     public void delete(Long tenantId, Long id) {
         repository.delete(find(tenantId, id));
-        // if the DELETE fails at commit (the customer has invoices), this event is rolled back with it
         audit.record(tenantId, AuditAction.CUSTOMER_DELETED, id, null);
     }
 

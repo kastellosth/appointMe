@@ -7,7 +7,6 @@ import java.math.BigDecimal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/** Plain unit test: no Spring, no database. Runs in milliseconds. */
 class MoneyTest {
 
     private static BigDecimal d(String s) {
@@ -17,10 +16,10 @@ class MoneyTest {
     @Test
     void taxIsRoundedHalfUpToCents() {
         assertEquals(d("6.00"), Money.taxOf(d("25.00"), d("0.2400")));
-        assertEquals(d("2.47"), Money.taxOf(d("10.30"), d("0.2400")));   // 2.472  -> 2.47
-        assertEquals(d("0.02"), Money.taxOf(d("0.10"), d("0.2400")));    // 0.024  -> 0.02
-        assertEquals(d("0.63"), Money.taxOf(d("0.625"), d("1")));        // exactly half a cent -> up
-        assertEquals(d("0.00"), Money.taxOf(d("19.99"), d("0")));        // no tax, still 2 decimals
+        assertEquals(d("2.47"), Money.taxOf(d("10.30"), d("0.2400")));
+        assertEquals(d("0.02"), Money.taxOf(d("0.10"), d("0.2400")));
+        assertEquals(d("0.63"), Money.taxOf(d("0.625"), d("1")));
+        assertEquals(d("0.00"), Money.taxOf(d("19.99"), d("0")));
     }
 
     @Test
