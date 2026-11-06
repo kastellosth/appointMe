@@ -4,6 +4,7 @@ import com.kastellosth.appointme.dto.PaymentRequest;
 import com.kastellosth.appointme.entity.PaymentMethod;
 import com.kastellosth.appointme.exception.ConflictException;
 import com.kastellosth.appointme.service.PaymentService;
+import com.kastellosth.appointme.support.DatabaseTestBase;
 import com.kastellosth.appointme.support.ParallelRunner;
 import com.kastellosth.appointme.support.RaceTestData;
 import com.kastellosth.appointme.support.RaceTestData.World;
@@ -27,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
         "spring.datasource.hikari.maximum-pool-size=30",
         "spring.datasource.hikari.minimum-idle=2"
 })
-class ConcurrentPaymentTest {
+class ConcurrentPaymentTest extends DatabaseTestBase {
 
     private static final BigDecimal TOTAL = new BigDecimal("100.00");
 

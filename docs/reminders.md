@@ -82,9 +82,6 @@ The unique key is `(appointment_id, appointment_starts_at)`, so a rescheduled ap
 
 ## Known limits
 
-- **`ReminderJobTest` shares the dev database.** Its fake sender also handles real dev appointments that are due soon
-  (within about 29 hours), marks them SENT and writes audit events. Reload the seed afterwards. Testcontainers
-  will remove this.
 - **There is no real email.** `LoggingReminderSender` only writes a log line. A real sender implements `ReminderSender`.
 - **One lead time for everyone.** Per-business settings and SMS would be later additions.
 - **The reminder row itself is never deleted.** A long-lived system would archive old rows.

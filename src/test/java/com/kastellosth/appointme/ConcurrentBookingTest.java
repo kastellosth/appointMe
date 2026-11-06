@@ -3,6 +3,7 @@ package com.kastellosth.appointme;
 import com.kastellosth.appointme.dto.AppointmentRequest;
 import com.kastellosth.appointme.exception.ConflictException;
 import com.kastellosth.appointme.service.AppointmentService;
+import com.kastellosth.appointme.support.DatabaseTestBase;
 import com.kastellosth.appointme.support.ParallelRunner;
 import com.kastellosth.appointme.support.RaceTestData;
 import com.kastellosth.appointme.support.RaceTestData.World;
@@ -27,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
         "spring.datasource.hikari.maximum-pool-size=40",
         "spring.datasource.hikari.minimum-idle=2"
 })
-class ConcurrentBookingTest {
+class ConcurrentBookingTest extends DatabaseTestBase {
 
     private static final int PARALLEL_REQUESTS = 30;
 

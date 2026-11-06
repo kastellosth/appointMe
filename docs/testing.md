@@ -6,18 +6,25 @@ Each layer proves something the others can't.
 |---|---|---|---|---|
 | Pure unit | `MoneyTest`, `InvoiceTest`, `RequestHashTest` | nothing | calculations and state machines | how parts work together |
 | Mockito unit | `service/*Test` | nothing | a service's decisions: branches, order of calls, error mapping | SQL, locks, transactions, triggers |
-| Database | `ReminderJobTest`, `AuditTrailTest`, `Concurrent*Test` | Docker database | SQL, locks, constraints, races | the behaviour of a real client |
-| SQL scripts | `scripts/day*-tests.sql` | Docker database | the database refuses bad data even without Java | anything in Java |
-| HTTP | local `http/*.http` files, git-ignored | running app | status codes, JSON, security | internal details |
+| Database | `MigrationsTest`, `ReminderJobTest`, `AuditTrailTest`, `Concurrent*Test` | Docker running (Testcontainers) | SQL, locks, constraints, races | the behaviour of a real client |
+| SQL scripts | `scripts/day*-tests.sql` | dev database (`appointme-db`) | the database refuses bad data even without Java | anything in Java |
+| HTTP | local `http/*.http` files, git-ignored | running app and dev database | status codes, JSON, security | internal details |
 
 ## Commands
 
 ```bash
 ./mvnw test -Dtest="com/kastellosth/appointme/service/*Test"   # Mockito tests, no database
-./mvnw test                                                    # everything, needs the Docker database
+./mvnw test                                                    # everything, needs Docker running, not appointme-db
 ```
 
-`ReminderJobTest` changes dev data, so reload the seed after a full run.
+## The test database
+
+Database tests extend `DatabaseTestBase`. It starts one empty PostgreSQL 16 for the whole run, using the same image as `docker-compose.yml`. Flyway applies every migration to it, and Testcontainers removes it afterwards.
+
+- **Dev data is safe.** Tests never connect to `appointme-db`.
+- **Migrations are tested from zero.** `MigrationsTest` checks that every migration file was applied.
+- **A test can't reach the dev database by accident.** `src/test/resources/application.properties` points at a port where nothing listens, so a test that forgets the base class fails with "Connection to localhost:1 refused".
+- **Tests share one database.** Each still creates its own business with `RaceTestData` and deletes it afterwards.
 
 ## What gets mocked
 

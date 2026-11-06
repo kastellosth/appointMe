@@ -56,7 +56,7 @@ This showed up in the Day 19 tests as "UNEXPECTED" outcomes (a 500 over HTTP), u
 ## Proof: the tests
 
 Both tests create their own throw-away business (`RaceTestData`), so they don't touch the dev
-seed, and they delete it afterwards. Both need the Docker database running.
+seed, and they delete it afterwards. Both run on the Testcontainers database, so Docker must be running.
 
 - **`ConcurrentBookingTest`**: 30 threads call `AppointmentService.create` for the same slot, all
   released at the same instant (`ParallelRunner`: one thread per task, a `CountDownLatch` "ready"

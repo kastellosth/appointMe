@@ -1,5 +1,6 @@
 package com.kastellosth.appointme;
 
+import com.kastellosth.appointme.support.DatabaseTestBase;
 import com.kastellosth.appointme.support.ParallelRunner;
 import com.kastellosth.appointme.support.RaceTestData;
 import com.kastellosth.appointme.support.RaceTestData.World;
@@ -33,7 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "spring.datasource.hikari.maximum-pool-size=40",
         "spring.datasource.hikari.minimum-idle=2"
 })
-class ConcurrentBookingHttpTest {
+class ConcurrentBookingHttpTest extends DatabaseTestBase {
 
     private static final int PARALLEL_REQUESTS = 30;
     private static final Pattern ACCESS_TOKEN = Pattern.compile("\"accessToken\"\\s*:\\s*\"([^\"]+)\"");

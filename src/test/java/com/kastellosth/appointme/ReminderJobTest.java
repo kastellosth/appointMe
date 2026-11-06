@@ -5,6 +5,7 @@ import com.kastellosth.appointme.service.ReminderMessage;
 import com.kastellosth.appointme.service.ReminderRunner;
 import com.kastellosth.appointme.service.ReminderSender;
 import com.kastellosth.appointme.service.ReminderService;
+import com.kastellosth.appointme.support.DatabaseTestBase;
 import com.kastellosth.appointme.support.ParallelRunner;
 import com.kastellosth.appointme.support.RaceTestData;
 import com.kastellosth.appointme.support.RaceTestData.World;
@@ -41,7 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "spring.datasource.hikari.minimum-idle=2"
 })
 @Import(ReminderJobTest.FakeSenderConfig.class)
-class ReminderJobTest {
+class ReminderJobTest extends DatabaseTestBase {
 
     static class FakeSender implements ReminderSender {
         final Queue<ReminderMessage> sent = new ConcurrentLinkedQueue<>();

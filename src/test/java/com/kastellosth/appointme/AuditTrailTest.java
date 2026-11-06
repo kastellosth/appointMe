@@ -15,6 +15,7 @@ import com.kastellosth.appointme.service.AuditService;
 import com.kastellosth.appointme.service.CustomerService;
 import com.kastellosth.appointme.service.InvoiceService;
 import com.kastellosth.appointme.service.PaymentService;
+import com.kastellosth.appointme.support.DatabaseTestBase;
 import com.kastellosth.appointme.support.ParallelRunner;
 import com.kastellosth.appointme.support.RaceTestData;
 import com.kastellosth.appointme.support.RaceTestData.World;
@@ -45,7 +46,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
         "spring.datasource.hikari.maximum-pool-size=30",
         "spring.datasource.hikari.minimum-idle=2"
 })
-class AuditTrailTest {
+class AuditTrailTest extends DatabaseTestBase {
 
     @Autowired
     private AuditService audit;
