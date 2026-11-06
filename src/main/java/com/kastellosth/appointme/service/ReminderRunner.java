@@ -23,7 +23,12 @@ public class ReminderRunner {
     public void runOnce(Instant now) {
         reminders.createDue(now);
         for (Long id : reminders.claim(now, BATCH_SIZE)) {
-            reminders.prepare(id, now).ifPresent(message -> send(id, message, now));
+            try {
+                reminders.prepare(id, now).ifPresent(message -> send(id, message, now));
+            } catch (RuntimeException e) {
+                // The row stays SENDING until its claim expires, then it is retried. The rest of the batch must not wait.
+                log.warn("Reminder {} could not be processed: {}", id, e.getClass().getSimpleName());
+            }
         }
     }
 

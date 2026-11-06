@@ -58,6 +58,7 @@ A duplicate reminder is the cheaper mistake. A real provider should receive `rem
 
 - A failed send is retried after 5, 10, 20 and 40 minutes. After 5 attempts it becomes FAILED, with a `REMINDER_FAILED` audit event.
 - A crash counts as an attempt, because `attempts` goes up at claim time. A reminder that crashes the app can't loop forever.
+- An error outside the send, such as a database failure in `prepare` or `markSent`, is logged and the batch continues. That row stays SENDING and is picked up again when its claim expires.
 - `reason` stores the exception's class name, never its message: messages can contain addresses. Logs hold only the reminder id.
 
 ### When a reminder is skipped
